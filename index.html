@@ -505,7 +505,7 @@ const TRACKS = {
   desert: {
     label: 'Ørkenen',
     obstacleTypes: ['cactus', 'camel', 'mummy'],
-    sky: ['#e8823a', '#f0a95e', '#fbdf9c'],
+    sky: ['#2d88d8', '#6cc3f0', '#eaf7ff'],
     showSun: true, showStars: false, showEarth: false, showClouds: true, showGrass: false,
     ground: ['#e0b96a', '#c08f45'], groundContact: '#8a6530',
     hill: ['#e3c07f', '#c99a54'], farHill: ['#f0d9a8', '#e8c887']
@@ -523,6 +523,15 @@ function initMoonStars() {
   }
 }
 initMoonStars();
+
+// UFOs drift across the moon sky "every once in a while" instead of clouds
+let ufos = [];
+let nextUfoTimer = 250;
+function resetUfos() {
+  ufos = [];
+  nextUfoTimer = 250 + Math.random()*200;
+}
+resetUfos();
 
 const HAIR_COLORS = {
   blond: '#e8c273',
@@ -635,6 +644,7 @@ function resetGame() {
   initHills();
   initFarHills();
   initPyramids();
+  resetUfos();
 }
 
 function scheduleNextObstacle() {
@@ -680,6 +690,12 @@ function startGame() {
   state = 'playing';
   document.getElementById('startScreen').classList.add('hidden');
   document.getElementById('gameOverScreen').classList.add('hidden');
+}
+
+function goToMenu() {
+  state = 'start';
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  document.getElementById('startScreen').classList.remove('hidden');
 }
 
 function endGame() {
@@ -824,6 +840,26 @@ function update(dt) {
     s.x -= s.speed * dt;
     if (s.x < 0) s.x += W;
   }
+  if (selectedTrack === 'moon') {
+    nextUfoTimer -= dt;
+    if (nextUfoTimer <= 0) {
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      ufos.push({
+        x: dir === 1 ? -60 : W + 60,
+        y: 35 + Math.random()*100,
+        speed: (1 + Math.random()*1.4) * dir,
+        size: 16 + Math.random()*10,
+        phase: Math.random()*Math.PI*2
+      });
+      nextUfoTimer = 500 + Math.random()*500; // rare — "every once in a while"
+    }
+    for (let i = ufos.length-1; i >= 0; i--) {
+      const u = ufos[i];
+      u.x += u.speed * dt;
+      u.phase += 0.05 * dt;
+      if (u.x < -80 || u.x > W + 80) ufos.splice(i, 1);
+    }
+  }
   for (const h of hills) {
     h.x -= speed*0.3 * dt;
     if (h.x < -200) h.x += 6*220;
@@ -908,6 +944,44 @@ function drawCloud(c) {
   ctx.arc(c.x+c.size*0.5, c.y+4, c.size*0.4, 0, Math.PI*2);
   ctx.arc(c.x-c.size*0.5, c.y+4, c.size*0.4, 0, Math.PI*2);
   ctx.fill();
+}
+
+function drawUfo(u) {
+  const bobY = u.y + Math.sin(u.phase)*4;
+
+  // soft glow
+  const glow = ctx.createRadialGradient(u.x, bobY, 0, u.x, bobY, u.size*2);
+  glow.addColorStop(0, 'rgba(140,255,180,0.35)');
+  glow.addColorStop(1, 'rgba(140,255,180,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(u.x - u.size*2, bobY - u.size*2, u.size*4, u.size*4);
+
+  // saucer body
+  const bodyGrad = ctx.createLinearGradient(u.x-u.size, bobY, u.x+u.size, bobY);
+  bodyGrad.addColorStop(0, '#9096a0');
+  bodyGrad.addColorStop(0.5, '#eef1f4');
+  bodyGrad.addColorStop(1, '#8d939c');
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.ellipse(u.x, bobY, u.size, u.size*0.35, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // glass dome
+  ctx.fillStyle = 'rgba(140,220,255,0.85)';
+  ctx.beginPath();
+  ctx.arc(u.x, bobY - u.size*0.12, u.size*0.42, Math.PI, 0);
+  ctx.fill();
+
+  // blinking lights along the rim
+  for (let i = -1; i <= 1; i++) {
+    ctx.fillStyle = (Math.sin(u.phase*3 + i) > 0) ? '#7CFC9A' : '#3a5a44';
+    ctx.beginPath();
+    ctx.arc(u.x + i*u.size*0.55, bobY + u.size*0.15, 2, 0, Math.PI*2);
+    ctx.fill();
+  }
 }
 
 // Traces a hill/mountain/dune silhouette into the current path (caller does
@@ -1527,6 +1601,7 @@ function drawObstacle(o) {
 function draw() {
   drawSky();
   if (currentTrack().showClouds) clouds.forEach(drawCloud);
+  if (selectedTrack === 'moon') ufos.forEach(drawUfo);
   drawFarHills();
   drawPyramids();
   drawHills();
@@ -1585,11 +1660,11 @@ wireSwatchRow('riderSwatches', 'data-color', (val) => { riderColor = val; });
 wireSwatchRow('hairSwatches', 'data-hair', (val) => { hairColor = val; });
 wireSwatchRow('horseSwatches', 'data-horse', (val) => { horseType = val; });
 
-document.getElementById('restartBtn').addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
-document.getElementById('restartBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); startGame(); }, {passive:false});
+document.getElementById('restartBtn').addEventListener('click', (e)=>{ e.preventDefault(); goToMenu(); });
+document.getElementById('restartBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); goToMenu(); }, {passive:false});
 
-document.getElementById('restartInGameBtn').addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
-document.getElementById('restartInGameBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); startGame(); }, {passive:false});
+document.getElementById('restartInGameBtn').addEventListener('click', (e)=>{ e.preventDefault(); goToMenu(); });
+document.getElementById('restartInGameBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); goToMenu(); }, {passive:false});
 
 document.getElementById('saveScoreBtn').addEventListener('click', (e)=>{ e.preventDefault(); saveScore(); });
 document.getElementById('saveScoreBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); saveScore(); }, {passive:false});
