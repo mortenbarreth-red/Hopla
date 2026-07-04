@@ -238,6 +238,12 @@
   #highscoreList .name { flex:1; text-align:left; padding-left:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #highscoreList .pts { color:#ffcc33; }
   #highscoreEmpty { font-size:14px; color:#aaa; }
+  #cloudStatusLine {
+    font-size:12px;
+    color:#bbb;
+    margin: -6px 0 14px 0;
+    max-width:280px;
+  }
   #cloudNote {
     font-size:12px;
     color:#f0c419;
@@ -311,6 +317,7 @@
       </div>
     </div>
 
+    <div id="cloudStatusLine">Sjekker tilkobling til delt highscore …</div>
     <button class="bigBtn" id="startBtn">START SPILLET</button>
   </div>
 
@@ -367,14 +374,26 @@ const FIREBASE_CONFIG = {
 
 let db = null;
 let cloudEnabled = false;
+let cloudStatusText = 'Sjekker tilkobling til delt highscore …';
 try {
-  if (FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.startsWith('REPLACE_') && typeof firebase !== 'undefined') {
+  if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.startsWith('REPLACE_')) {
+    cloudStatusText = 'Delt highscore: AV (Firebase er ikke satt opp i koden)';
+  } else if (typeof firebase === 'undefined') {
+    cloudStatusText = 'Delt highscore: AV (Firebase-biblioteket lastet ikke — sjekk nettforbindelse eller annonseblokkering)';
+  } else {
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
     cloudEnabled = true;
+    cloudStatusText = 'Sjekker tilkobling til delt highscore …';
   }
 } catch (err) {
-  cloudEnabled = false; // if setup is wrong/misconfigured, just fall back to local scores
+  cloudEnabled = false;
+  cloudStatusText = 'Delt highscore: AV (feil ved oppstart: ' + (err && err.message ? err.message : err) + ')';
+}
+
+function updateCloudStatusLine() {
+  const el = document.getElementById('cloudStatusLine');
+  if (el) el.textContent = cloudStatusText;
 }
 
 async function fetchCloudHighscores() {
@@ -387,6 +406,8 @@ async function fetchCloudHighscores() {
     }
     return [];
   } catch (err) {
+    cloudStatusText = 'Delt highscore: AV (kunne ikke lese — ' + (err && err.message ? err.message : err) + ')';
+    updateCloudStatusLine();
     return null; // offline, blocked, or misconfigured — caller falls back to local list
   }
 }
@@ -397,6 +418,8 @@ async function pushCloudHighscores(list) {
     await db.collection('hestehopp').doc('topscores').set({ list });
     return true;
   } catch (err) {
+    cloudStatusText = 'Delt highscore: AV (kunne ikke skrive — ' + (err && err.message ? err.message : err) + ')';
+    updateCloudStatusLine();
     return false;
   }
 }
@@ -412,8 +435,15 @@ function setCloudNote(msg) {
 // the time the player finishes their first run.
 if (cloudEnabled) {
   fetchCloudHighscores().then(list => {
-    if (list) { highscores = list; renderHighscoreList(); }
+    if (list) {
+      highscores = list;
+      renderHighscoreList();
+      cloudStatusText = 'Delt highscore: PÅ ✅';
+    }
+    updateCloudStatusLine();
   });
+} else {
+  // updated after DOM exists; see call at bottom of init
 }
 let speed = 6;
 let frame = 0;
@@ -509,6 +539,7 @@ function initFarHills() {
 initClouds();
 initHills();
 initFarHills();
+updateCloudStatusLine();
 
 function resetGame() {
   score = 0;
