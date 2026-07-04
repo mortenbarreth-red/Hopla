@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Hesteryttern - Hopp over hindrene!</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; user-select:none; }
+  html, body {
+    height:100%;
+    width:100%;
+    background: #1a1a2e;
+    overflow:hidden;
+    font-family: 'Courier New', monospace;
+    touch-action: none;
+    position:fixed;
+    overscroll-behavior: none;
+  }
+  #gameContainer {
+    position:relative;
+    width:100vw;
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    touch-action: none;
+  }
+  canvas {
+    background:#87ceeb;
+    image-rendering: pixelated;
+    max-width:100vw;
+    max-height:100vh;
+    border-top: 4px solid #000;
+    border-bottom: 4px solid #000;
+    touch-action: none;
+  }
+  #hud {
+    position:absolute;
+    top:10px;
+    left:10px;
+    color:#fff;
+    font-size:18px;
+    text-shadow: 2px 2px 0 #000;
+    letter-spacing:1px;
+    line-height:1.5;
+    z-index:5;
+  }
+  #jumpBtn {
+    position:absolute;
+    bottom:24px;
+    right:24px;
+    width:110px;
+    height:110px;
+    border-radius:50%;
+    background: linear-gradient(#ffcc33, #cc8800);
+    border: 4px solid #663300;
+    color:#3a2200;
+    font-size:18px;
+    font-weight:bold;
+    font-family:'Courier New', monospace;
+    box-shadow: 0 6px 0 #663300;
+    z-index:5;
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.4);
+    touch-action: none;
+  }
+  #jumpBtn:active {
+    box-shadow: 0 2px 0 #663300;
+    transform: translateY(4px);
+  }
+  #restartInGameBtn {
+    position:absolute;
+    top:10px;
+    right:10px;
+    padding: 8px 14px;
+    font-size:14px;
+    font-family:'Courier New', monospace;
+    font-weight:bold;
+    background: linear-gradient(#e74c3c, #a93226);
+    border:3px solid #641e16;
+    color:#fff;
+    border-radius:6px;
+    cursor:pointer;
+    box-shadow: 0 4px 0 #641e16;
+    z-index:5;
+    touch-action: none;
+  }
+  #restartInGameBtn:active {
+    box-shadow: 0 1px 0 #641e16;
+    transform: translateY(3px);
+  }
+  #startScreen, #gameOverScreen {
+    position:absolute;
+    top:0; left:0; width:100%; height:100%;
+    background: rgba(0,0,0,0.75);
+    color:#fff;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    z-index:10;
+    padding: 20px;
+    overflow-y:auto;
+  }
+  #startScreen h1, #gameOverScreen h1 {
+    font-size: 32px;
+    color:#ffcc33;
+    text-shadow: 3px 3px 0 #000;
+    margin-bottom: 16px;
+    letter-spacing:2px;
+  }
+  #startScreen p, #gameOverScreen p {
+    font-size:16px;
+    margin-bottom:20px;
+    line-height:1.6;
+    max-width:340px;
+  }
+  .bigBtn {
+    padding: 14px 32px;
+    font-size:20px;
+    font-family:'Courier New', monospace;
+    font-weight:bold;
+    background: linear-gradient(#66cc66, #2e8b2e);
+    border:4px solid #1a4d1a;
+    color:#fff;
+    border-radius:8px;
+    cursor:pointer;
+    box-shadow: 0 5px 0 #1a4d1a;
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.3);
+  }
+  .bigBtn:active {
+    box-shadow: 0 2px 0 #1a4d1a;
+    transform: translateY(3px);
+  }
+  #score {
+    font-size: 22px;
+    margin: 10px 0;
+    color:#ffcc33;
+  }
+  .colorPickerBlock {
+    margin-bottom: 18px;
+  }
+  .colorPickerLabel {
+    font-size: 13px;
+    color:#ccc;
+    margin-bottom: 8px;
+    letter-spacing:1px;
+    text-transform: uppercase;
+  }
+  .swatchRow {
+    display:flex;
+    gap: 12px;
+    justify-content:center;
+  }
+  .swatch {
+    position:relative;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 3px solid #555;
+    cursor:pointer;
+    padding:0;
+    touch-action: none;
+  }
+  .swatch.selected {
+    border-color: #ffcc33;
+    box-shadow: 0 0 0 2px #ffcc33;
+  }
+  .swatchDotted .dot {
+    position:absolute;
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    background:#111;
+  }
+  #nameEntryBlock {
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    margin: 14px 0;
+  }
+  #nameInput {
+    font-family:'Courier New', monospace;
+    font-size:18px;
+    padding: 10px 14px;
+    border-radius:6px;
+    border: 3px solid #663300;
+    width: 220px;
+    max-width: 70vw;
+    text-align:center;
+    background:#fff8ee;
+    color:#3a2200;
+  }
+  .saveBtn {
+    background: linear-gradient(#ffcc33, #cc8800) !important;
+    border-color:#663300 !important;
+    box-shadow: 0 5px 0 #663300 !important;
+    color:#3a2200 !important;
+    font-size:16px !important;
+    padding: 10px 22px !important;
+  }
+  .saveBtn:active {
+    box-shadow: 0 2px 0 #663300 !important;
+  }
+  .saveBtn:disabled {
+    opacity:0.5;
+    cursor:default;
+  }
+  #savedMsg {
+    color:#7ee787;
+    font-weight:bold;
+    margin: -4px 0 10px 0;
+  }
+  #highscoreBlock {
+    background: rgba(255,255,255,0.06);
+    border-radius:10px;
+    padding: 12px 20px;
+    margin-bottom: 16px;
+    width: 260px;
+    max-width: 80vw;
+  }
+  #highscoreList {
+    list-style:none;
+    padding:0;
+    margin:0;
+    text-align:left;
+    font-size:15px;
+  }
+  #highscoreList li {
+    display:flex;
+    justify-content:space-between;
+    padding: 4px 2px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+  }
+  #highscoreList li:last-child { border-bottom:none; }
+  #highscoreList .rank { color:#ffcc33; font-weight:bold; width:22px; }
+  #highscoreList .name { flex:1; text-align:left; padding-left:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #highscoreList .pts { color:#ffcc33; }
+  #highscoreEmpty { font-size:14px; color:#aaa; }
+  .hidden { display:none !important; }
+  #debugBanner {
+    position:absolute;
+    top:0; left:0; right:0;
+    background:#ff0044;
+    color:#fff;
+    font-size:12px;
+    padding:8px;
+    z-index:20;
+    word-break:break-word;
+    text-align:left;
+    max-height:35vh;
+    overflow-y:auto;
+  }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="game" width="800" height="400"></canvas>
+  <div id="hud">Poeng: <span id="scoreDisplay">0</span><br>Hindre klart: <span id="obstacleDisplay">0</span></div>
+  <div id="debugBanner" class="hidden"></div>
+  <button id="restartInGameBtn">🔄 Start på nytt</button>
+  <button id="jumpBtn">HOPP!</button>
+
+  <div id="startScreen">
+    <h1>🐴 HESTERYTTEREN 🐴</h1>
+    <p>Ridderen din galopperer automatisk bortover.<br>
+    Trykk HOPP i riktig øyeblikk for å hoppe over hindrene!<br><br>
+    (Du kan også bruke mellomromstasten eller trykke hvor som helst på skjermen)</p>
+
+    <div class="colorPickerBlock">
+      <div class="colorPickerLabel">Rytterens farge</div>
+      <div class="swatchRow" id="riderSwatches">
+        <button class="swatch selected" data-color="#2255cc" style="background:#2255cc" aria-label="Blå"></button>
+        <button class="swatch" data-color="#c0392b" style="background:#c0392b" aria-label="Rød"></button>
+        <button class="swatch" data-color="#222222" style="background:#222222" aria-label="Svart"></button>
+      </div>
+    </div>
+
+    <div class="colorPickerBlock">
+      <div class="colorPickerLabel">Rytterens hårfarge</div>
+      <div class="swatchRow" id="hairSwatches">
+        <button class="swatch" data-hair="blond" style="background:#e8c273" aria-label="Blond"></button>
+        <button class="swatch selected" data-hair="black" style="background:#1c1c1c" aria-label="Svart"></button>
+        <button class="swatch" data-hair="brown" style="background:#5c3a21" aria-label="Brun"></button>
+        <button class="swatch" data-hair="rainbow" style="background:conic-gradient(from 0deg, #ff004c, #ff9500, #ffe600, #00c853, #2979ff, #b388ff, #ff004c)" aria-label="Regnbue"></button>
+      </div>
+    </div>
+
+    <div class="colorPickerBlock">
+      <div class="colorPickerLabel">Hestens farge</div>
+      <div class="swatchRow" id="horseSwatches">
+        <button class="swatch" data-horse="white" style="background:#f0f0ec" aria-label="Hvit"></button>
+        <button class="swatch swatchDotted" data-horse="whiteSpots" style="background:#f0f0ec" aria-label="Hvit med sorte prikker">
+          <span class="dot" style="top:5px;left:6px"></span>
+          <span class="dot" style="top:16px;left:18px"></span>
+          <span class="dot" style="top:22px;left:8px"></span>
+        </button>
+        <button class="swatch selected" data-horse="brown" style="background:#8b5a2b" aria-label="Brun"></button>
+        <button class="swatch" data-horse="gold" style="background:#d4af37" aria-label="Gull"></button>
+      </div>
+    </div>
+
+    <button class="bigBtn" id="startBtn">START SPILLET</button>
+  </div>
+
+  <div id="gameOverScreen" class="hidden">
+    <h1>AUDA!</h1>
+    <p>Rytteren din traff et hinder.</p>
+    <div id="score">Poeng: 0</div>
+    <div id="obstacleCount">Hindre klart: 0</div>
+
+    <div id="nameEntryBlock">
+      <input type="text" id="nameInput" maxlength="15" placeholder="Skriv navnet ditt" autocomplete="off" autocapitalize="words">
+      <button class="bigBtn saveBtn" id="saveScoreBtn">LAGRE SCORE</button>
+    </div>
+    <div id="savedMsg" class="hidden">Lagret! 🎉</div>
+
+    <div id="highscoreBlock">
+      <div class="colorPickerLabel">Topp 5</div>
+      <ol id="highscoreList"></ol>
+    </div>
+
+    <button class="bigBtn" id="restartBtn">PRØV IGJEN</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// Ground level
+const GROUND_Y = H - 70;
+
+// Game state
+let state = 'start'; // start, playing, gameover
+let score = 0;
+let obstaclesCleared = 0;
+let highscores = []; // {name, score, obstacles} — kept in memory only for this session
+let speed = 6;
+let frame = 0;
+let gameOverTimer = 0;
+
+// Appearance customization (chosen on start screen)
+let riderColor = '#2255cc'; // default matches the pre-selected swatch in the HTML
+let horseType = 'brown';   // default matches the pre-selected swatch in the HTML
+let hairColor = 'black';   // default matches the pre-selected swatch in the HTML
+
+const HAIR_COLORS = {
+  blond: '#e8c273',
+  black: '#1c1c1c',
+  brown: '#5c3a21'
+};
+
+// Returns a fillStyle for the given hair choice: a solid color, or for
+// 'rainbow' a gradient across the given local coordinates.
+function getHairFill(x0, y0, x1, y1) {
+  if (hairColor === 'rainbow') {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, '#ff004c');
+    g.addColorStop(0.2, '#ff9500');
+    g.addColorStop(0.4, '#ffe600');
+    g.addColorStop(0.6, '#00c853');
+    g.addColorStop(0.8, '#2979ff');
+    g.addColorStop(1, '#b388ff');
+    return g;
+  }
+  return HAIR_COLORS[hairColor] || HAIR_COLORS.black;
+}
+
+// Small utility to lighten/darken a hex color for gradient shading (percent: -100..100)
+function shadeColor(hex, percent) {
+  const num = parseInt(hex.replace('#',''), 16);
+  let r = (num >> 16) + Math.round(2.55 * percent);
+  let g = ((num >> 8) & 0x00FF) + Math.round(2.55 * percent);
+  let b = (num & 0x0000FF) + Math.round(2.55 * percent);
+  r = Math.max(0, Math.min(255, r));
+  g = Math.max(0, Math.min(255, g));
+  b = Math.max(0, Math.min(255, b));
+  return '#' + (0x1000000 + r*0x10000 + g*0x100 + b).toString(16).slice(1);
+}
+
+const HORSE_PALETTES = {
+  white:      { body: '#f0f0ec', mane: '#c9c9c2', muzzle: '#d8d5cc', spots:false },
+  whiteSpots: { body: '#f0f0ec', mane: '#c9c9c2', muzzle: '#d8d5cc', spots:true  },
+  brown:      { body: '#8b5a2b', mane: '#4a2f18', muzzle: '#6b4423', spots:false },
+  gold:       { body: '#d4af37', mane: '#8a6d1f', muzzle: '#b8912b', spots:false }
+};
+
+// Horse / rider
+const horse = {
+  x: 120,
+  y: GROUND_Y,
+  width: 70,
+  height: 55,
+  vy: 0,
+  jumping: false,
+  legPhase: 0
+};
+const GRAVITY = 0.9;
+const JUMP_FORCE = -15;
+
+// Obstacles
+let obstacles = [];
+let nextObstacleTimer = 0;
+
+// Background layers (parallax)
+let clouds = [];
+let hills = [];
+let farHills = [];
+let groundOffset = 0;
+
+function initClouds() {
+  clouds = [];
+  for (let i=0;i<5;i++){
+    clouds.push({x: Math.random()*W, y: 30+Math.random()*70, size: 20+Math.random()*20, speed: 0.3+Math.random()*0.4});
+  }
+}
+function initHills() {
+  hills = [];
+  for (let i=0;i<6;i++){
+    hills.push({x: i*220, w: 180, h: 40+Math.random()*30});
+  }
+}
+function initFarHills() {
+  farHills = [];
+  for (let i=0;i<5;i++){
+    farHills.push({x: i*300, w: 260, h: 70+Math.random()*50});
+  }
+}
+initClouds();
+initHills();
+initFarHills();
+
+function resetGame() {
+  score = 0;
+  obstaclesCleared = 0;
+  speed = 6;
+  frame = 0;
+  obstacles = [];
+  nextObstacleTimer = 60;
+  horse.y = GROUND_Y;
+  horse.vy = 0;
+  horse.jumping = false;
+  initClouds();
+  initHills();
+  initFarHills();
+}
+
+function scheduleNextObstacle() {
+  // random interval so obstacles never come at a predictable rhythm
+  const minGap = 55;
+  const maxGap = 165;
+  nextObstacleTimer = minGap + Math.random()*(maxGap-minGap);
+}
+
+// Obstacle size limits are chosen against the jump physics (gravity/jump force
+// below) so every obstacle is always clearable with correct timing, even at
+// the game's slowest speed. Tall ones stay narrow, wide ones stay low.
+function spawnObstacle() {
+  const types = ['rock','bush','fence','tallFence','wideLog'];
+  const type = types[Math.floor(Math.random()*types.length)];
+  let w, h;
+  if (type === 'rock') { w = 28; h = 30; }
+  else if (type === 'bush') { w = 36; h = 26; }
+  else if (type === 'fence') { w = 24; h = 40; }
+  else if (type === 'tallFence') { w = 22; h = 66; }   // taller, but narrow
+  else { w = 64; h = 22; }                             // wideLog: wide, but low
+  obstacles.push({x: W + 20, y: GROUND_Y, width: w, height: h, type, passed:false});
+}
+
+function doJump() {
+  if (state === 'start') {
+    startGame();
+    return;
+  }
+  if (state === 'gameover') {
+    return;
+  }
+  if (state === 'playing' && !horse.jumping) {
+    horse.vy = JUMP_FORCE;
+    horse.jumping = true;
+  }
+}
+
+function startGame() {
+  resetGame();
+  state = 'playing';
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+}
+
+function endGame() {
+  try {
+    state = 'gameover';
+    document.getElementById('score').textContent = 'Poeng: ' + score;
+    document.getElementById('obstacleCount').textContent = 'Hindre klart: ' + obstaclesCleared;
+
+    // Reset name-entry UI for this run
+    const nameInput = document.getElementById('nameInput');
+    const saveBtn = document.getElementById('saveScoreBtn');
+    nameInput.value = '';
+    nameInput.disabled = false;
+    saveBtn.disabled = false;
+    document.getElementById('savedMsg').classList.add('hidden');
+    document.getElementById('nameEntryBlock').classList.remove('hidden');
+
+    renderHighscoreList();
+    document.getElementById('gameOverScreen').classList.remove('hidden');
+  } catch (err) {
+    showDebug('endGame feil: ' + (err && err.message ? err.message : err));
+  }
+}
+
+function saveScore() {
+  const nameInput = document.getElementById('nameInput');
+  const saveBtn = document.getElementById('saveScoreBtn');
+  if (saveBtn.disabled) return; // already saved this run
+  const name = (nameInput.value || 'Anonym').trim().slice(0, 15) || 'Anonym';
+  highscores.push({ name, score, obstacles: obstaclesCleared });
+  highscores.sort((a, b) => b.score - a.score);
+  highscores = highscores.slice(0, 5);
+  renderHighscoreList();
+  nameInput.disabled = true;
+  saveBtn.disabled = true;
+  document.getElementById('savedMsg').classList.remove('hidden');
+}
+
+function renderHighscoreList() {
+  const list = document.getElementById('highscoreList');
+  list.innerHTML = '';
+  if (highscores.length === 0) {
+    const li = document.createElement('li');
+    li.id = 'highscoreEmpty';
+    li.textContent = 'Ingen scorer ennå — bli den første!';
+    list.appendChild(li);
+    return;
+  }
+  highscores.forEach((entry, i) => {
+    const li = document.createElement('li');
+    const rank = document.createElement('span');
+    rank.className = 'rank';
+    rank.textContent = (i + 1) + '.';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = entry.name;
+    const pts = document.createElement('span');
+    pts.className = 'pts';
+    pts.textContent = entry.score + ' p';
+    li.appendChild(rank);
+    li.appendChild(name);
+    li.appendChild(pts);
+    list.appendChild(li);
+  });
+}
+
+function update(dt) {
+  if (state !== 'playing') return;
+  frame += dt;
+
+  // difficulty ramps slowly
+  speed = 6 + Math.min(4, frame/800);
+
+  // horse physics
+  horse.vy += GRAVITY * dt;
+  horse.y += horse.vy * dt;
+  if (horse.y > GROUND_Y) {
+    horse.y = GROUND_Y;
+    horse.vy = 0;
+    horse.jumping = false;
+  }
+  horse.legPhase += horse.jumping ? 0 : 0.35 * dt;
+
+  // obstacles
+  nextObstacleTimer -= dt;
+  if (nextObstacleTimer <= 0) {
+    spawnObstacle();
+    scheduleNextObstacle();
+  }
+  for (let i = obstacles.length-1; i>=0; i--) {
+    const o = obstacles[i];
+    o.x -= speed * dt;
+    if (!o.passed && o.x + o.width < horse.x) {
+      o.passed = true;
+      score += 10;
+      obstaclesCleared++;
+    }
+    if (o.x < -50) obstacles.splice(i,1);
+  }
+
+  // collision (a bit forgiving hitbox)
+  const hb = { x: horse.x+14, y: horse.y - horse.height + 14, w: horse.width-24, h: horse.height-14 };
+  for (const o of obstacles) {
+    const ob = { x: o.x+4, y: o.y - o.height, w: o.width-8, h: o.height };
+    if (hb.x < ob.x + ob.w && hb.x + hb.w > ob.x &&
+        hb.y < ob.y + ob.h && hb.y + hb.h > ob.y) {
+      endGame();
+      break;
+    }
+  }
+
+  // background
+  groundOffset -= speed * dt;
+  if (groundOffset <= -40) groundOffset = 0;
+  for (const c of clouds) {
+    c.x -= c.speed * dt;
+    if (c.x < -50) c.x = W + 50;
+  }
+  for (const h of hills) {
+    h.x -= speed*0.3 * dt;
+    if (h.x < -200) h.x += 6*220;
+  }
+  for (const fh of farHills) {
+    fh.x -= speed*0.12 * dt;
+    if (fh.x < -300) fh.x += 5*300;
+  }
+
+  document.getElementById('scoreDisplay').textContent = score;
+  document.getElementById('obstacleDisplay').textContent = obstaclesCleared;
+}
+
+function drawSky() {
+  const grad = ctx.createLinearGradient(0,0,0,GROUND_Y);
+  grad.addColorStop(0, '#3d7fc9');
+  grad.addColorStop(0.55, '#6fb0e6');
+  grad.addColorStop(1, '#bfe4f5');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,GROUND_Y+2);
+
+  // sun with soft glow for a bit of atmosphere/light direction
+  const sunX = W*0.8, sunY = 70;
+  const glow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 90);
+  glow.addColorStop(0, 'rgba(255,250,210,0.9)');
+  glow.addColorStop(0.4, 'rgba(255,250,210,0.35)');
+  glow.addColorStop(1, 'rgba(255,250,210,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(sunX-90, sunY-90, 180, 180);
+  ctx.fillStyle = '#fff6d6';
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, 26, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawCloud(c) {
+  // soft shadow under the cloud, then a lit puff on top, for a touch of depth
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.beginPath();
+  ctx.arc(c.x, c.y+3, c.size*0.5, 0, Math.PI*2);
+  ctx.arc(c.x+c.size*0.5, c.y+7, c.size*0.4, 0, Math.PI*2);
+  ctx.arc(c.x-c.size*0.5, c.y+7, c.size*0.4, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, c.size*0.5, 0, Math.PI*2);
+  ctx.arc(c.x+c.size*0.5, c.y+4, c.size*0.4, 0, Math.PI*2);
+  ctx.arc(c.x-c.size*0.5, c.y+4, c.size*0.4, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawFarHills() {
+  // hazy distant mountains, lighter/cooler tone = atmospheric perspective
+  for (const fh of farHills) {
+    const grad = ctx.createLinearGradient(0, GROUND_Y - fh.h, 0, GROUND_Y);
+    grad.addColorStop(0, '#9db8d6');
+    grad.addColorStop(1, '#c3d9e8');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(fh.x, GROUND_Y);
+    ctx.quadraticCurveTo(fh.x + fh.w*0.5, GROUND_Y - fh.h, fh.x + fh.w, GROUND_Y);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawHills() {
+  for (const h of hills) {
+    const grad = ctx.createLinearGradient(0, GROUND_Y - h.h, 0, GROUND_Y);
+    grad.addColorStop(0, '#7ec95a');
+    grad.addColorStop(1, '#549140');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(h.x, GROUND_Y);
+    ctx.quadraticCurveTo(h.x + h.w/2, GROUND_Y - h.h, h.x + h.w, GROUND_Y);
+    ctx.closePath();
+    ctx.fill();
+    // sunlit highlight edge for a bit of roundness
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(h.x + h.w*0.15, GROUND_Y - h.h*0.55);
+    ctx.quadraticCurveTo(h.x + h.w/2, GROUND_Y - h.h, h.x + h.w*0.85, GROUND_Y - h.h*0.55);
+    ctx.stroke();
+  }
+}
+
+function drawGround() {
+  // main dirt with a light-to-dark gradient so it reads as receding ground
+  const grad = ctx.createLinearGradient(0, GROUND_Y, 0, H);
+  grad.addColorStop(0, '#9c6a37');
+  grad.addColorStop(1, '#6e451f');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, GROUND_Y, W, H-GROUND_Y);
+
+  // dark contact line where ground meets sky/hills, grounds everything visually
+  ctx.fillStyle = '#4d2f16';
+  ctx.fillRect(0, GROUND_Y, W, 4);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(0, GROUND_Y+4, W, 2);
+
+  // dashed texture moving
+  ctx.fillStyle = '#7a4a20';
+  for (let x = groundOffset; x < W; x += 40) {
+    ctx.fillRect(x, GROUND_Y+16, 20, 5);
+  }
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  for (let x = groundOffset; x < W; x += 40) {
+    ctx.fillRect(x, GROUND_Y+21, 20, 2);
+  }
+
+  // grass tufts with a subtle highlight for a bit of dimension
+  ctx.strokeStyle = '#3d6423';
+  ctx.lineWidth = 2.5;
+  for (let x = groundOffset; x < W; x += 55) {
+    ctx.beginPath();
+    ctx.moveTo(x, GROUND_Y);
+    ctx.lineTo(x-3, GROUND_Y-8);
+    ctx.moveTo(x+4, GROUND_Y);
+    ctx.lineTo(x+7, GROUND_Y-10);
+    ctx.moveTo(x+8, GROUND_Y);
+    ctx.lineTo(x+10, GROUND_Y-6);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#6ab04c';
+  ctx.lineWidth = 1;
+  for (let x = groundOffset; x < W; x += 55) {
+    ctx.beginPath();
+    ctx.moveTo(x+7, GROUND_Y-10);
+    ctx.lineTo(x+6, GROUND_Y-7);
+    ctx.stroke();
+  }
+}
+
+function drawHorseAndRider() {
+  const x = horse.x;
+  const y = horse.y;
+  const bounce = horse.jumping ? 0 : Math.sin(horse.legPhase)*3;
+  const palette = HORSE_PALETTES[horseType] || HORSE_PALETTES.brown;
+  const outline = 'rgba(0,0,0,0.35)';
+
+  ctx.save();
+  ctx.translate(x, y + bounce);
+
+  // soft grounded shadow (radial gradient reads much better than a flat blob)
+  const shadowRadius = Math.max(6, 30 - (horse.jumping ? (GROUND_Y - horse.y) * 0.3 : 0));
+  const shadowGrad = ctx.createRadialGradient(35, 6, 0, 35, 6, shadowRadius);
+  shadowGrad.addColorStop(0, 'rgba(0,0,0,0.35)');
+  shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = shadowGrad;
+  ctx.beginPath();
+  ctx.ellipse(35, 6, shadowRadius, 7, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // legs (simple animated)
+  const legSwing = horse.jumping ? 0 : Math.sin(horse.legPhase)*10;
+  ctx.strokeStyle = shadeColor(palette.mane, -15);
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+  // back legs
+  ctx.beginPath();
+  ctx.moveTo(15, -10); ctx.lineTo(15 + legSwing*0.5, -30 + (horse.jumping?8:0));
+  ctx.moveTo(25, -8); ctx.lineTo(25 - legSwing*0.5, -30 + (horse.jumping?8:0));
+  ctx.stroke();
+  // front legs
+  ctx.beginPath();
+  ctx.moveTo(50, -10); ctx.lineTo(50 - legSwing*0.5, -30 + (horse.jumping?8:0));
+  ctx.moveTo(60, -8); ctx.lineTo(60 + legSwing*0.5, -30 + (horse.jumping?8:0));
+  ctx.stroke();
+
+  // body
+  const bodyGrad = ctx.createLinearGradient(8, -51, 68, -19);
+  bodyGrad.addColorStop(0, shadeColor(palette.body, 22));
+  bodyGrad.addColorStop(0.55, palette.body);
+  bodyGrad.addColorStop(1, shadeColor(palette.body, -22));
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.ellipse(38, -35, 30, 16, -0.05, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // spots (dalmatian-style variant only)
+  if (palette.spots) {
+    ctx.fillStyle = '#1a1a1a';
+    const spotPositions = [[24,-40,4.5],[36,-30,5.5],[48,-38,4],[30,-24,3.5],[54,-28,3.5]];
+    for (const [sx, sy, sr] of spotPositions) {
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, sr, sr*0.75, 0.3, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  // neck + head
+  const headGrad = ctx.createLinearGradient(55, -72, 75, -42);
+  headGrad.addColorStop(0, shadeColor(palette.body, 20));
+  headGrad.addColorStop(1, shadeColor(palette.body, -18));
+  ctx.fillStyle = headGrad;
+  ctx.beginPath();
+  ctx.moveTo(60, -42);
+  ctx.quadraticCurveTo(75, -55, 72, -68);
+  ctx.quadraticCurveTo(70, -72, 64, -70);
+  ctx.quadraticCurveTo(62, -58, 55, -45);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // mane
+  ctx.fillStyle = palette.mane;
+  ctx.beginPath();
+  ctx.moveTo(66, -68);
+  ctx.lineTo(60, -60);
+  ctx.lineTo(65, -55);
+  ctx.lineTo(58, -48);
+  ctx.lineTo(63, -44);
+  ctx.lineTo(56, -40);
+  ctx.lineTo(50, -40);
+  ctx.lineTo(58, -66);
+  ctx.closePath();
+  ctx.fill();
+
+  // tail
+  ctx.strokeStyle = palette.mane;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(9, -40);
+  ctx.quadraticCurveTo(-5, -30 + Math.sin(horse.legPhase*2)*4, 0, -15);
+  ctx.stroke();
+
+  // muzzle
+  ctx.fillStyle = palette.muzzle;
+  ctx.beginPath();
+  ctx.ellipse(70, -66, 6, 4, 0.3, 0, Math.PI*2);
+  ctx.fill();
+
+  // eye
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(66, -68, 1.6, 0, Math.PI*2);
+  ctx.fill();
+  // tiny eye highlight for a bit of life
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.beginPath();
+  ctx.arc(66.6, -68.6, 0.5, 0, Math.PI*2);
+  ctx.fill();
+
+  // === Rider ===
+  const shirtGrad = ctx.createLinearGradient(33, -70, 51, -46);
+  shirtGrad.addColorStop(0, shadeColor(riderColor, 25));
+  shirtGrad.addColorStop(1, shadeColor(riderColor, -20));
+  ctx.fillStyle = shirtGrad;
+  ctx.beginPath();
+  ctx.ellipse(42, -58, 9, 12, 0.1, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+
+  // rider arm
+  ctx.strokeStyle = shadeColor(riderColor, -10);
+  ctx.lineWidth = 5;
+  ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(48,-58);
+  ctx.lineTo(60,-52);
+  ctx.stroke();
+
+  // rider leg
+  ctx.strokeStyle = '#2c3e50';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(40,-50);
+  ctx.lineTo(48,-34);
+  ctx.stroke();
+
+  // rider head
+  const skinGrad = ctx.createLinearGradient(33, -81, 47, -67);
+  skinGrad.addColorStop(0, '#ffd9ae');
+  skinGrad.addColorStop(1, '#dba871');
+  ctx.fillStyle = skinGrad;
+  ctx.beginPath();
+  ctx.arc(40, -74, 7, 0, Math.PI*2);
+  ctx.fill();
+
+  // hair — peeks out from under the helmet brim as a front fringe and a
+  // back tuft, so the chosen color/style is visible even with a helmet on
+  ctx.fillStyle = getHairFill(32, -74, 40, -66);
+  ctx.beginPath();
+  ctx.ellipse(34.5, -71, 2.6, 4, -0.25, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(47, -70.5, 3, 4.2, 0.3, 0, Math.PI*2);
+  ctx.fill();
+
+  // rider helmet/hat
+  ctx.fillStyle = shadeColor(riderColor, -8);
+  ctx.beginPath();
+  ctx.arc(40, -76, 7.5, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(33, -76, 15, 3);
+  ctx.fillStyle = shadeColor(riderColor, 30);
+  ctx.beginPath();
+  ctx.arc(37, -78, 2.5, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawObstacle(o) {
+  ctx.save();
+  ctx.translate(o.x, o.y);
+
+  // drop shadow grounds every obstacle type consistently
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(o.width/2, 3, o.width*0.5, 5, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  if (o.type === 'rock') {
+    const grad = ctx.createLinearGradient(4, -o.height, o.width, 0);
+    grad.addColorStop(0, '#a8a8a8');
+    grad.addColorStop(1, '#5f5f5f');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(4,-o.height);
+    ctx.lineTo(o.width-6,-o.height+6);
+    ctx.lineTo(o.width,0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  } else if (o.type === 'bush') {
+    const grad = ctx.createLinearGradient(0, -o.height, o.width*0.3, 0);
+    grad.addColorStop(0, '#4caf50');
+    grad.addColorStop(1, '#1b5e20');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(o.width*0.3, -o.height*0.5, o.height*0.5, 0, Math.PI*2);
+    ctx.arc(o.width*0.65, -o.height*0.6, o.height*0.45, 0, Math.PI*2);
+    ctx.arc(o.width*0.5, -o.height*0.3, o.height*0.4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  } else if (o.type === 'fence') {
+    const postGrad = ctx.createLinearGradient(0, -o.height, 7, -o.height);
+    postGrad.addColorStop(0, '#a8763f');
+    postGrad.addColorStop(1, '#6b451f');
+    ctx.fillStyle = postGrad;
+    ctx.fillRect(2, -o.height, 5, o.height);
+    ctx.fillRect(o.width-7, -o.height, 5, o.height);
+    ctx.fillStyle = '#8b5a2b';
+    ctx.fillRect(0, -o.height*0.7, o.width, 5);
+    ctx.fillRect(0, -o.height*0.35, o.width, 5);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(0, -o.height*0.7, o.width, 1.5);
+    ctx.fillRect(0, -o.height*0.35, o.width, 1.5);
+  } else if (o.type === 'tallFence') {
+    // taller hurdle with a warning-striped top rail
+    const postGrad = ctx.createLinearGradient(0, -o.height, 6, -o.height);
+    postGrad.addColorStop(0, '#a8763f');
+    postGrad.addColorStop(1, '#6b451f');
+    ctx.fillStyle = postGrad;
+    ctx.fillRect(1, -o.height, 5, o.height);
+    ctx.fillRect(o.width-6, -o.height, 5, o.height);
+    ctx.fillStyle = '#8b5a2b';
+    ctx.fillRect(0, -o.height*0.55, o.width, 5);
+    ctx.fillRect(0, -o.height*0.22, o.width, 5);
+    // red/white top rail to signal "tall - watch out"
+    const railY = -o.height;
+    const stripeW = 6;
+    for (let sx = 0; sx < o.width; sx += stripeW) {
+      ctx.fillStyle = (Math.floor(sx/stripeW) % 2 === 0) ? '#c0392b' : '#f0f0ec';
+      ctx.fillRect(sx, railY, stripeW, 6);
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, railY, o.width, 6);
+  } else { // wideLog
+    const grad = ctx.createLinearGradient(0, -o.height, 0, 0);
+    grad.addColorStop(0, '#9c6a3c');
+    grad.addColorStop(1, '#5a3417');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(o.width/2, -o.height/2, o.width/2, o.height/2, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // log rings on each end to read clearly as a log, not a rock
+    ctx.strokeStyle = '#c99257';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(6, -o.height/2, o.height*0.32, o.height*0.4, 0, 0, Math.PI*2);
+    ctx.ellipse(o.width-6, -o.height/2, o.height*0.32, o.height*0.4, 0, 0, Math.PI*2);
+    ctx.stroke();
+    // highlight along the top for roundness
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(o.width/2, -o.height/2, o.width*0.42, o.height*0.32, 0, Math.PI*1.15, Math.PI*1.85);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function draw() {
+  drawSky();
+  clouds.forEach(drawCloud);
+  drawFarHills();
+  drawHills();
+  drawGround();
+  obstacles.forEach(drawObstacle);
+  drawHorseAndRider();
+}
+
+function showDebug(msg) {
+  const el = document.getElementById('debugBanner');
+  el.textContent = '⚠️ ' + msg;
+  el.classList.remove('hidden');
+}
+
+window.addEventListener('error', (e)=>{
+  showDebug('Feil: ' + e.message + ' (linje ' + e.lineno + ')');
+});
+
+// Input handlers
+// iOS Safari note: without blocking touchmove/gesture events, a touch on the
+// jump button can trigger a page scroll/bounce or double-fire a synthetic
+// click, which stalls the render loop mid-jump. We prevent all of that here.
+
+let lastJumpTime = 0;
+function safeJump(e) {
+  if (e) e.preventDefault();
+  const now = Date.now();
+  if (now - lastJumpTime < 150) return; // debounce double-fire from touch+click
+  lastJumpTime = now;
+  doJump();
+}
+
+const jumpBtn = document.getElementById('jumpBtn');
+jumpBtn.addEventListener('touchstart', safeJump, {passive:false});
+jumpBtn.addEventListener('mousedown', safeJump);
+
+document.getElementById('startBtn').addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
+document.getElementById('startBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); startGame(); }, {passive:false});
+
+// Color swatch pickers on the start screen
+function wireSwatchRow(rowId, dataAttr, onPick) {
+  const row = document.getElementById(rowId);
+  const buttons = row.querySelectorAll('.swatch');
+  function pick(btn) {
+    buttons.forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    onPick(btn.getAttribute(dataAttr));
+  }
+  buttons.forEach(btn => {
+    btn.addEventListener('click', (e) => { e.preventDefault(); pick(btn); });
+    btn.addEventListener('touchstart', (e) => { e.preventDefault(); pick(btn); }, {passive:false});
+  });
+}
+wireSwatchRow('riderSwatches', 'data-color', (val) => { riderColor = val; });
+wireSwatchRow('hairSwatches', 'data-hair', (val) => { hairColor = val; });
+wireSwatchRow('horseSwatches', 'data-horse', (val) => { horseType = val; });
+
+document.getElementById('restartBtn').addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
+document.getElementById('restartBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); startGame(); }, {passive:false});
+
+document.getElementById('restartInGameBtn').addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
+document.getElementById('restartInGameBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); startGame(); }, {passive:false});
+
+document.getElementById('saveScoreBtn').addEventListener('click', (e)=>{ e.preventDefault(); saveScore(); });
+document.getElementById('saveScoreBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); saveScore(); }, {passive:false});
+document.getElementById('nameInput').addEventListener('keydown', (e)=>{
+  if (e.key === 'Enter') { e.preventDefault(); saveScore(); }
+});
+
+window.addEventListener('keydown', (e)=>{
+  if (document.activeElement && document.activeElement.id === 'nameInput') return;
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
+    e.preventDefault();
+    doJump();
+  }
+});
+
+canvas.addEventListener('mousedown', safeJump);
+canvas.addEventListener('touchstart', safeJump, {passive:false});
+
+// Block all other touch gestures (scroll, pinch-zoom, double-tap-zoom,
+// pull-to-refresh) anywhere on the page so the browser never intercepts
+// the game loop or shifts the layout mid-game.
+// Block scroll/zoom gestures only within the game area itself, so we don't
+// fight with any chrome the surrounding app (e.g. Claude's file viewer) needs.
+const gameContainer = document.getElementById('gameContainer');
+gameContainer.addEventListener('touchmove', (e)=>{ e.preventDefault(); }, {passive:false});
+document.addEventListener('gesturestart', (e)=>{ e.preventDefault(); });
+
+// If the tab loses focus/visibility (e.g. brief iOS gesture chrome) and
+// comes back, make sure the loop keeps running smoothly using timestamps
+// rather than assuming a constant frame rate.
+document.addEventListener('visibilitychange', ()=>{
+  lastTimestamp = null;
+});
+
+let lastTimestamp = null;
+const BASE_FRAME_MS = 1000 / 60; // physics/speed values were tuned assuming 60fps
+function loop(ts) {
+  requestAnimationFrame(loop);
+  if (lastTimestamp === null) lastTimestamp = ts;
+  const delta = ts - lastTimestamp;
+  lastTimestamp = ts;
+  // Skip catch-up frames if the tab was backgrounded for a long stretch
+  if (delta > 200) return;
+  // Normalize to "60fps units" so the game runs at the same speed whether
+  // the screen refreshes at 60Hz (iPhone) or 120Hz/144Hz (many PCs/monitors).
+  const dt = delta / BASE_FRAME_MS;
+  try {
+    update(dt);
+    draw();
+  } catch (err) {
+    // Never let an unexpected error kill the render loop entirely
+    showDebug(String(err && err.message ? err.message : err));
+  }
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
