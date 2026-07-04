@@ -96,11 +96,17 @@
     display:flex;
     flex-direction:column;
     align-items:center;
-    justify-content:center;
+    justify-content:flex-start;
     text-align:center;
     z-index:10;
-    padding: 20px;
+    padding: 20px 20px 40px;
     overflow-y:auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #startScreen::before, #gameOverScreen::before {
+    content:'';
+    flex: 1 0 auto;
+    min-height: 0;
   }
   #startScreen h1, #gameOverScreen h1 {
     font-size: 32px;
@@ -308,6 +314,7 @@
         <button class="trackBtn selected" data-track="england">🌍<br>England</button>
         <button class="trackBtn" data-track="moon">🌙<br>Månen</button>
         <button class="trackBtn" data-track="desert">🏜️<br>Ørkenen</button>
+        <button class="trackBtn" data-track="volcano">🌋<br>Vulkanen</button>
       </div>
     </div>
 
@@ -509,8 +516,17 @@ const TRACKS = {
     showSun: true, showStars: false, showEarth: false, showClouds: true, showGrass: false,
     ground: ['#e0b96a', '#c08f45'], groundContact: '#8a6530',
     hill: ['#e3c07f', '#c99a54'], farHill: ['#f0d9a8', '#e8c887']
+  },
+  volcano: {
+    label: 'Vulkanen',
+    obstacleTypes: ['lavaFlow'],
+    sky: ['#2a0f12', '#7a2411', '#e8632c'],
+    showSun: false, showStars: false, showEarth: false, showClouds: false, showGrass: false,
+    ground: ['#3a2620', '#1c1210'], groundContact: '#120b09',
+    hill: ['#4a2f22', '#241713'], farHill: ['#5c3a28', '#3a2419']
   }
 };
+const VOLCANO_HEIGHT = 210; // fixed geometry for the always-centered volcano
 function currentTrack() { return TRACKS[selectedTrack] || TRACKS.england; }
 
 // Fixed star field for the moon track (positions randomized once so they
@@ -532,6 +548,11 @@ function resetUfos() {
   nextUfoTimer = 250 + Math.random()*200;
 }
 resetUfos();
+
+// Smoke particles drifting up from the volcano's crater
+let volcanoSmoke = [];
+function resetVolcanoSmoke() { volcanoSmoke = []; }
+resetVolcanoSmoke();
 
 const HAIR_COLORS = {
   blond: '#e8c273',
@@ -645,6 +666,7 @@ function resetGame() {
   initFarHills();
   initPyramids();
   resetUfos();
+  resetVolcanoSmoke();
 }
 
 function scheduleNextObstacle() {
@@ -667,6 +689,7 @@ function spawnObstacle() {
   else if (type === 'tallFence' || type === 'cactus') { w = 22; h = 66; } // taller, but narrow
   else if (type === 'wideLog' || type === 'crater') { w = 64; h = 22; }  // wide, but low
   else if (type === 'mummy') { w = 26; h = 48; }                         // standing figure, medium height
+  else if (type === 'lavaFlow') { w = 56 + Math.random()*24; h = 20; }   // wide, low, glowing stream
   else { w = 50; h = 34; }                                                // camel
   obstacles.push({x: W + 20, y: GROUND_Y, width: w, height: h, type, passed:false});
 }
@@ -860,6 +883,27 @@ function update(dt) {
       if (u.x < -80 || u.x > W + 80) ufos.splice(i, 1);
     }
   }
+  if (selectedTrack === 'volcano') {
+    const craterX = W/2, craterY = GROUND_Y - VOLCANO_HEIGHT + 6;
+    if (Math.random() < 0.07 * dt) {
+      volcanoSmoke.push({
+        x: craterX + (Math.random()-0.5)*18,
+        y: craterY,
+        size: 12 + Math.random()*8,
+        alpha: 0.45 + Math.random()*0.25,
+        vy: -(0.25 + Math.random()*0.25),
+        drift: (Math.random()-0.5)*0.3
+      });
+    }
+    for (let i = volcanoSmoke.length-1; i >= 0; i--) {
+      const p = volcanoSmoke[i];
+      p.y += p.vy * dt;
+      p.x += p.drift * dt;
+      p.size += 0.12 * dt;
+      p.alpha -= 0.0035 * dt;
+      if (p.alpha <= 0) volcanoSmoke.splice(i, 1);
+    }
+  }
   for (const h of hills) {
     h.x -= speed*0.3 * dt;
     if (h.x < -200) h.x += 6*220;
@@ -982,6 +1026,137 @@ function drawUfo(u) {
     ctx.arc(u.x + i*u.size*0.55, bobY + u.size*0.15, 2, 0, Math.PI*2);
     ctx.fill();
   }
+}
+
+// The volcano always sits dead-center in the background — it never scrolls
+// with the parallax layers like hills do. Its lava veins slowly sway side to
+// side instead, giving the impression of riding around it rather than past it.
+function drawVolcano() {
+  const cx = W/2;
+  const baseY = GROUND_Y;
+  const h = VOLCANO_HEIGHT;
+  const baseW = 360;
+  const craterY = baseY - h;
+
+  // smoke drawn behind the cone so it reads as rising up and away
+  for (const p of volcanoSmoke) {
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+    g.addColorStop(0, `rgba(90,88,92,${Math.max(0,p.alpha)})`);
+    g.addColorStop(1, 'rgba(90,88,92,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // mountain body
+  const grad = ctx.createLinearGradient(0, craterY, 0, baseY);
+  grad.addColorStop(0, '#5a2f22');
+  grad.addColorStop(0.6, '#3a2018');
+  grad.addColorStop(1, '#1c120e');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(cx - baseW/2, baseY);
+  ctx.quadraticCurveTo(cx - baseW*0.28, baseY - h*0.55, cx - baseW*0.14, craterY + 10);
+  ctx.lineTo(cx + baseW*0.14, craterY + 10);
+  ctx.quadraticCurveTo(cx + baseW*0.28, baseY - h*0.55, cx + baseW/2, baseY);
+  ctx.closePath();
+  ctx.fill();
+
+  // static rock ridges for texture — makes the cone read as a real weathered
+  // mountain rather than a flat triangle
+  ctx.strokeStyle = 'rgba(15,9,7,0.55)';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  const ridgeDefs = [
+    {xFrac:-0.30, topFrac:0.30, seed:0.4},
+    {xFrac:-0.17, topFrac:0.48, seed:1.7},
+    {xFrac:-0.03, topFrac:0.38, seed:2.6},
+    {xFrac:0.11,  topFrac:0.55, seed:3.5},
+    {xFrac:0.24,  topFrac:0.40, seed:4.8},
+    {xFrac:0.33,  topFrac:0.28, seed:5.6}
+  ];
+  ridgeDefs.forEach(r => {
+    const xBase = cx + r.xFrac*baseW;
+    const yTop = baseY - h*r.topFrac;
+    const steps = 4;
+    ctx.beginPath();
+    ctx.moveTo(xBase, baseY);
+    for (let i=1;i<=steps;i++) {
+      const t = i/steps;
+      const y = baseY - (baseY-yTop)*t;
+      const wig = Math.sin(t*5 + r.seed)*7*(1-t*0.4);
+      ctx.lineTo(xBase+wig, y);
+    }
+    ctx.stroke();
+  });
+  // lighter highlight just beside each ridge crack for a bit of relief/depth
+  ctx.strokeStyle = 'rgba(140,90,65,0.3)';
+  ctx.lineWidth = 1.2;
+  ridgeDefs.forEach(r => {
+    const xBase = cx + r.xFrac*baseW + 4;
+    const yTop = baseY - h*r.topFrac;
+    ctx.beginPath();
+    ctx.moveTo(xBase, baseY);
+    ctx.lineTo(xBase + 3, yTop + 8);
+    ctx.stroke();
+  });
+
+  // animated lava veins down the slopes — their anchor point sways slowly,
+  // simulating the rider circling around the mountain
+  const sway = Math.sin(frame*0.006) * baseW*0.06;
+  ctx.strokeStyle = 'rgba(255,120,30,0.85)';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  [-1, 1].forEach(side => {
+    ctx.beginPath();
+    ctx.moveTo(cx + side*baseW*0.05 + sway*side, craterY + 14);
+    ctx.quadraticCurveTo(cx + side*baseW*0.16 + sway*side, baseY - h*0.5, cx + side*baseW*0.32 + sway*side, baseY - 6);
+    ctx.stroke();
+  });
+  ctx.strokeStyle = 'rgba(255,200,120,0.5)';
+  ctx.lineWidth = 1.2;
+  [-1, 1].forEach(side => {
+    ctx.beginPath();
+    ctx.moveTo(cx + side*baseW*0.05 + sway*side, craterY + 14);
+    ctx.quadraticCurveTo(cx + side*baseW*0.16 + sway*side, baseY - h*0.5, cx + side*baseW*0.32 + sway*side, baseY - 6);
+    ctx.stroke();
+  });
+
+  // a couple of thinner secondary cracks with their own independent pulse,
+  // scattered off to the sides for extra liveliness
+  const secondaryVeins = [
+    {xFrac:-0.20, topFrac:0.62, phase:1.2},
+    {xFrac:0.22,  topFrac:0.55, phase:3.1}
+  ];
+  secondaryVeins.forEach(v => {
+    const pulse = 0.35 + Math.sin(frame*0.05 + v.phase)*0.2;
+    ctx.strokeStyle = `rgba(255,110,25,${Math.max(0.15,pulse)})`;
+    ctx.lineWidth = 1.6;
+    const xBase = cx + v.xFrac*baseW + sway*(v.xFrac < 0 ? -1 : 1);
+    const yTop = baseY - h*v.topFrac;
+    ctx.beginPath();
+    ctx.moveTo(xBase, baseY - 4);
+    ctx.quadraticCurveTo(xBase + 10, (baseY+yTop)/2, xBase - 6, yTop);
+    ctx.stroke();
+  });
+
+  // crater glow + opening
+  const glow = ctx.createRadialGradient(cx, craterY+6, 4, cx, craterY+6, 48);
+  glow.addColorStop(0, 'rgba(255,180,60,0.9)');
+  glow.addColorStop(1, 'rgba(255,180,60,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.ellipse(cx, craterY+6, 48, 20, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#2a1510';
+  ctx.beginPath();
+  ctx.ellipse(cx, craterY+6, 30, 10, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = `rgba(255,150,50,${0.6 + Math.sin(frame*0.08)*0.2})`;
+  ctx.beginPath();
+  ctx.ellipse(cx, craterY+8, 18, 6, 0, 0, Math.PI*2);
+  ctx.fill();
 }
 
 // Traces a hill/mountain/dune silhouette into the current path (caller does
@@ -1165,6 +1340,18 @@ function drawGround() {
       ctx.beginPath();
       ctx.moveTo(x, GROUND_Y+32);
       ctx.quadraticCurveTo(x+12, GROUND_Y+27, x+24, GROUND_Y+32);
+      ctx.stroke();
+    }
+  } else if (selectedTrack === 'volcano') {
+    // glowing cracks in the cooled volcanic rock, pulsing gently
+    const pulse = 0.45 + Math.sin(frame*0.05)*0.15;
+    ctx.strokeStyle = `rgba(255,110,30,${pulse})`;
+    ctx.lineWidth = 2;
+    for (let x = groundOffset; x < W; x += 60) {
+      ctx.beginPath();
+      ctx.moveTo(x, GROUND_Y+12);
+      ctx.lineTo(x+10, GROUND_Y+22);
+      ctx.lineTo(x+4, GROUND_Y+33);
       ctx.stroke();
     }
   }
@@ -1492,6 +1679,60 @@ function drawObstacle(o) {
     ctx.beginPath();
     ctx.arc(o.width*0.88, -o.height*0.85, 1.3, 0, Math.PI*2);
     ctx.fill();
+  } else if (o.type === 'lavaFlow') {
+    const bottom = H - o.y; // extends all the way to the bottom of the screen
+    const poolH = o.height; // height of the rounded "pool" bump at the surface
+
+    // ambient glow cast onto the surrounding ground near the pool's surface
+    const glow = ctx.createRadialGradient(o.width/2, 0, 2, o.width/2, 0, o.width*0.7);
+    glow.addColorStop(0, 'rgba(255,140,40,0.45)');
+    glow.addColorStop(1, 'rgba(255,140,40,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.ellipse(o.width/2, 0, o.width*0.7, poolH*1.3, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // main lava body: a rounded pool surface that plunges all the way to the
+    // bottom of the screen, so it reads as a real stream rather than a puddle
+    const bodyPath = () => {
+      ctx.moveTo(0, -poolH*0.2);
+      ctx.quadraticCurveTo(o.width*0.5, -poolH, o.width, -poolH*0.2);
+      ctx.lineTo(o.width, bottom);
+      ctx.lineTo(0, bottom);
+      ctx.closePath();
+    };
+    const grad = ctx.createLinearGradient(0, -poolH, 0, bottom);
+    grad.addColorStop(0, '#ffd24a');
+    grad.addColorStop(0.12, '#ff7a1a');
+    grad.addColorStop(1, '#7a1d06');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    bodyPath();
+    ctx.fill();
+
+    // flowing stripe texture, animated so the lava looks like it's moving
+    ctx.save();
+    ctx.beginPath();
+    bodyPath();
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(255,255,180,0.5)';
+    ctx.lineWidth = 3;
+    const shift = (frame*0.6) % 16;
+    for (let sx = -bottom + shift; sx < o.width + bottom; sx += 16) {
+      ctx.beginPath();
+      ctx.moveTo(sx, -poolH);
+      ctx.lineTo(sx + bottom + poolH, bottom);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // rim outline where the pool surface meets the air
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -poolH*0.2);
+    ctx.quadraticCurveTo(o.width*0.5, -poolH, o.width, -poolH*0.2);
+    ctx.stroke();
   } else if (o.type === 'mummy') {
     const wrapGrad = ctx.createLinearGradient(0, -o.height, o.width, 0);
     wrapGrad.addColorStop(0, '#e8dfc4');
@@ -1602,9 +1843,13 @@ function draw() {
   drawSky();
   if (currentTrack().showClouds) clouds.forEach(drawCloud);
   if (selectedTrack === 'moon') ufos.forEach(drawUfo);
-  drawFarHills();
-  drawPyramids();
-  drawHills();
+  if (selectedTrack === 'volcano') {
+    drawVolcano();
+  } else {
+    drawFarHills();
+    drawPyramids();
+    drawHills();
+  }
   drawGround();
   obstacles.forEach(drawObstacle);
   drawHorseAndRider();
