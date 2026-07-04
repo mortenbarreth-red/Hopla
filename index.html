@@ -319,6 +319,15 @@
     </div>
 
     <div class="colorPickerBlock">
+      <div class="colorPickerLabel">Vanskelighetsgrad</div>
+      <div class="swatchRow" id="difficultySwatches">
+        <button class="trackBtn selected" data-difficulty="easy">🙂<br>Lett</button>
+        <button class="trackBtn" data-difficulty="medium">😬<br>Medium</button>
+        <button class="trackBtn" data-difficulty="hard">🔥<br>Vanskelig</button>
+      </div>
+    </div>
+
+    <div class="colorPickerBlock">
       <div class="colorPickerLabel">Rytterens farge</div>
       <div class="swatchRow" id="riderSwatches">
         <button class="swatch selected" data-color="#2255cc" style="background:#2255cc" aria-label="Blå"></button>
@@ -488,6 +497,16 @@ let riderColor = '#2255cc'; // default matches the pre-selected swatch in the HT
 let horseType = 'brown';   // default matches the pre-selected swatch in the HTML
 let hairColor = 'black';   // default matches the pre-selected swatch in the HTML
 let selectedTrack = 'england'; // default matches the pre-selected swatch in the HTML
+let difficulty = 'easy'; // default matches the pre-selected swatch in the HTML
+
+// Medium/hard make obstacles bigger and more frequent. gapMul shrinks the
+// random spawn-interval range (so "20% more often" = interval / 1.2).
+const DIFFICULTY_SETTINGS = {
+  easy:   { sizeMul: 1,    gapMul: 1 },
+  medium: { sizeMul: 1.15, gapMul: 1/1.2 },
+  hard:   { sizeMul: 1.20, gapMul: 1/1.3 }
+};
+function currentDifficulty() { return DIFFICULTY_SETTINGS[difficulty] || DIFFICULTY_SETTINGS.easy; }
 
 // Track themes: each defines its own sky/ground/hill colors, sky decorations
 // (sun/stars/earth), whether clouds & grass appear, and which obstacle types
@@ -553,6 +572,31 @@ resetUfos();
 let volcanoSmoke = [];
 function resetVolcanoSmoke() { volcanoSmoke = []; }
 resetVolcanoSmoke();
+
+// Rocks the volcano occasionally spews out
+let volcanoRocks = [];
+function resetVolcanoRocks() { volcanoRocks = []; }
+resetVolcanoRocks();
+
+// How far the lava veins/ridges have "rotated" around the cone (0..1, wraps).
+// Increasing this slides all surface features from right to left, giving the
+// impression of riding around the mountain rather than it just sitting still.
+let volcanoRotation = 0;
+
+// Surface features on the volcano cone: ridges (rock texture) and lava veins.
+// baseXFrac/topFrac position them on the cone at rotation=0; they slide left
+// and wrap around as volcanoRotation increases.
+const VOLCANO_FEATURES = [
+  { type: 'vein', baseXFrac: -0.20, topFrac: 0.62 },
+  { type: 'vein', baseXFrac: 0.18, topFrac: 0.58 },
+  { type: 'ridge', baseXFrac: -0.35, topFrac: 0.30, seed: 0.4 },
+  { type: 'ridge', baseXFrac: -0.10, topFrac: 0.48, seed: 1.7 },
+  { type: 'ridge', baseXFrac: 0.05, topFrac: 0.38, seed: 2.6 },
+  { type: 'ridge', baseXFrac: 0.28, topFrac: 0.55, seed: 3.5 },
+  { type: 'ridge', baseXFrac: 0.40, topFrac: 0.40, seed: 4.8 },
+  { type: 'thinVein', baseXFrac: -0.32, topFrac: 0.65, phase: 1.2 },
+  { type: 'thinVein', baseXFrac: 0.33, topFrac: 0.5, phase: 3.1 }
+];
 
 const HAIR_COLORS = {
   blond: '#e8c273',
@@ -667,13 +711,16 @@ function resetGame() {
   initPyramids();
   resetUfos();
   resetVolcanoSmoke();
+  resetVolcanoRocks();
+  volcanoRotation = 0;
 }
 
 function scheduleNextObstacle() {
   // random interval so obstacles never come at a predictable rhythm
   const minGap = 55;
   const maxGap = 165;
-  nextObstacleTimer = minGap + Math.random()*(maxGap-minGap);
+  const gapMul = currentDifficulty().gapMul;
+  nextObstacleTimer = (minGap + Math.random()*(maxGap-minGap)) * gapMul;
 }
 
 // Obstacle size limits are chosen against the jump physics (gravity/jump force
@@ -691,6 +738,8 @@ function spawnObstacle() {
   else if (type === 'mummy') { w = 26; h = 48; }                         // standing figure, medium height
   else if (type === 'lavaFlow') { w = 56 + Math.random()*24; h = 20; }   // wide, low, glowing stream
   else { w = 50; h = 34; }                                                // camel
+  const sizeMul = currentDifficulty().sizeMul;
+  w *= sizeMul; h *= sizeMul;
   obstacles.push({x: W + 20, y: GROUND_Y, width: w, height: h, type, passed:false});
 }
 
@@ -903,6 +952,32 @@ function update(dt) {
       p.alpha -= 0.0035 * dt;
       if (p.alpha <= 0) volcanoSmoke.splice(i, 1);
     }
+
+    // occasionally spew a rock out of the crater
+    if (Math.random() < 0.006 * dt) {
+      volcanoRocks.push({
+        x: craterX + (Math.random()-0.5)*10,
+        y: craterY,
+        vx: (Math.random()-0.5)*3.2,
+        vy: -(3 + Math.random()*2.2),
+        rot: Math.random()*Math.PI*2,
+        vrot: (Math.random()-0.5)*0.2,
+        size: 4 + Math.random()*4
+      });
+    }
+    for (let i = volcanoRocks.length-1; i >= 0; i--) {
+      const r = volcanoRocks[i];
+      r.vy += 0.12 * dt; // gravity
+      r.x += r.vx * dt;
+      r.y += r.vy * dt;
+      r.rot += r.vrot * dt;
+      if (r.y > GROUND_Y + 20) volcanoRocks.splice(i, 1);
+    }
+
+    // surface features (lava veins/ridges) slide right-to-left, simulating
+    // riding around the mountain rather than it just sitting still
+    volcanoRotation += speed * 0.0006 * dt;
+    volcanoRotation -= Math.floor(volcanoRotation);
   }
   for (const h of hills) {
     h.x -= speed*0.3 * dt;
@@ -1049,97 +1124,78 @@ function drawVolcano() {
     ctx.fill();
   }
 
-  // mountain body
+  // mountain body — also used as a clip region so every surface feature
+  // drawn on it stays neatly within the cone silhouette as it slides around
+  const mountainPath = () => {
+    ctx.moveTo(cx - baseW/2, baseY);
+    ctx.quadraticCurveTo(cx - baseW*0.28, baseY - h*0.55, cx - baseW*0.14, craterY + 10);
+    ctx.lineTo(cx + baseW*0.14, craterY + 10);
+    ctx.quadraticCurveTo(cx + baseW*0.28, baseY - h*0.55, cx + baseW/2, baseY);
+    ctx.closePath();
+  };
   const grad = ctx.createLinearGradient(0, craterY, 0, baseY);
   grad.addColorStop(0, '#5a2f22');
   grad.addColorStop(0.6, '#3a2018');
   grad.addColorStop(1, '#1c120e');
   ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.moveTo(cx - baseW/2, baseY);
-  ctx.quadraticCurveTo(cx - baseW*0.28, baseY - h*0.55, cx - baseW*0.14, craterY + 10);
-  ctx.lineTo(cx + baseW*0.14, craterY + 10);
-  ctx.quadraticCurveTo(cx + baseW*0.28, baseY - h*0.55, cx + baseW/2, baseY);
-  ctx.closePath();
+  mountainPath();
   ctx.fill();
 
-  // static rock ridges for texture — makes the cone read as a real weathered
-  // mountain rather than a flat triangle
-  ctx.strokeStyle = 'rgba(15,9,7,0.55)';
-  ctx.lineWidth = 2.5;
-  ctx.lineCap = 'round';
-  const ridgeDefs = [
-    {xFrac:-0.30, topFrac:0.30, seed:0.4},
-    {xFrac:-0.17, topFrac:0.48, seed:1.7},
-    {xFrac:-0.03, topFrac:0.38, seed:2.6},
-    {xFrac:0.11,  topFrac:0.55, seed:3.5},
-    {xFrac:0.24,  topFrac:0.40, seed:4.8},
-    {xFrac:0.33,  topFrac:0.28, seed:5.6}
-  ];
-  ridgeDefs.forEach(r => {
-    const xBase = cx + r.xFrac*baseW;
-    const yTop = baseY - h*r.topFrac;
-    const steps = 4;
-    ctx.beginPath();
-    ctx.moveTo(xBase, baseY);
-    for (let i=1;i<=steps;i++) {
-      const t = i/steps;
-      const y = baseY - (baseY-yTop)*t;
-      const wig = Math.sin(t*5 + r.seed)*7*(1-t*0.4);
-      ctx.lineTo(xBase+wig, y);
+  // surface features (rock ridges + lava veins) — each slides from right to
+  // left as volcanoRotation increases and wraps around, simulating riding
+  // around the mountain. Clipped to the cone so nothing pokes outside it.
+  ctx.save();
+  ctx.beginPath();
+  mountainPath();
+  ctx.clip();
+  VOLCANO_FEATURES.forEach(f => {
+    const xFrac = ((f.baseXFrac + 0.5 - volcanoRotation) % 1 + 1) % 1 - 0.5;
+    const xBase = cx + xFrac*baseW;
+    const yTop = baseY - h*f.topFrac;
+    if (f.type === 'ridge') {
+      ctx.strokeStyle = 'rgba(15,9,7,0.55)';
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      const steps = 4;
+      ctx.beginPath();
+      ctx.moveTo(xBase, baseY);
+      for (let i=1;i<=steps;i++) {
+        const t = i/steps;
+        const y = baseY - (baseY-yTop)*t;
+        const wig = Math.sin(t*5 + f.seed)*7*(1-t*0.4);
+        ctx.lineTo(xBase+wig, y);
+      }
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(140,90,65,0.3)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(xBase + 4, baseY);
+      ctx.lineTo(xBase + 7, yTop + 8);
+      ctx.stroke();
+    } else if (f.type === 'vein') {
+      const sign = xFrac < 0 ? -1 : 1;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255,120,30,0.85)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(xBase, yTop);
+      ctx.quadraticCurveTo(xBase + sign*baseW*0.08, (yTop+baseY)/2, xBase + sign*baseW*0.16, baseY-6);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,200,120,0.5)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    } else { // thinVein
+      const pulse = 0.35 + Math.sin(frame*0.05 + f.phase)*0.2;
+      ctx.strokeStyle = `rgba(255,110,25,${Math.max(0.15,pulse)})`;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(xBase, baseY - 4);
+      ctx.quadraticCurveTo(xBase + 10, (baseY+yTop)/2, xBase - 6, yTop);
+      ctx.stroke();
     }
-    ctx.stroke();
   });
-  // lighter highlight just beside each ridge crack for a bit of relief/depth
-  ctx.strokeStyle = 'rgba(140,90,65,0.3)';
-  ctx.lineWidth = 1.2;
-  ridgeDefs.forEach(r => {
-    const xBase = cx + r.xFrac*baseW + 4;
-    const yTop = baseY - h*r.topFrac;
-    ctx.beginPath();
-    ctx.moveTo(xBase, baseY);
-    ctx.lineTo(xBase + 3, yTop + 8);
-    ctx.stroke();
-  });
-
-  // animated lava veins down the slopes — their anchor point sways slowly,
-  // simulating the rider circling around the mountain
-  const sway = Math.sin(frame*0.006) * baseW*0.06;
-  ctx.strokeStyle = 'rgba(255,120,30,0.85)';
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  [-1, 1].forEach(side => {
-    ctx.beginPath();
-    ctx.moveTo(cx + side*baseW*0.05 + sway*side, craterY + 14);
-    ctx.quadraticCurveTo(cx + side*baseW*0.16 + sway*side, baseY - h*0.5, cx + side*baseW*0.32 + sway*side, baseY - 6);
-    ctx.stroke();
-  });
-  ctx.strokeStyle = 'rgba(255,200,120,0.5)';
-  ctx.lineWidth = 1.2;
-  [-1, 1].forEach(side => {
-    ctx.beginPath();
-    ctx.moveTo(cx + side*baseW*0.05 + sway*side, craterY + 14);
-    ctx.quadraticCurveTo(cx + side*baseW*0.16 + sway*side, baseY - h*0.5, cx + side*baseW*0.32 + sway*side, baseY - 6);
-    ctx.stroke();
-  });
-
-  // a couple of thinner secondary cracks with their own independent pulse,
-  // scattered off to the sides for extra liveliness
-  const secondaryVeins = [
-    {xFrac:-0.20, topFrac:0.62, phase:1.2},
-    {xFrac:0.22,  topFrac:0.55, phase:3.1}
-  ];
-  secondaryVeins.forEach(v => {
-    const pulse = 0.35 + Math.sin(frame*0.05 + v.phase)*0.2;
-    ctx.strokeStyle = `rgba(255,110,25,${Math.max(0.15,pulse)})`;
-    ctx.lineWidth = 1.6;
-    const xBase = cx + v.xFrac*baseW + sway*(v.xFrac < 0 ? -1 : 1);
-    const yTop = baseY - h*v.topFrac;
-    ctx.beginPath();
-    ctx.moveTo(xBase, baseY - 4);
-    ctx.quadraticCurveTo(xBase + 10, (baseY+yTop)/2, xBase - 6, yTop);
-    ctx.stroke();
-  });
+  ctx.restore();
 
   // crater glow + opening
   const glow = ctx.createRadialGradient(cx, craterY+6, 4, cx, craterY+6, 48);
@@ -1157,6 +1213,25 @@ function drawVolcano() {
   ctx.beginPath();
   ctx.ellipse(cx, craterY+8, 18, 6, 0, 0, Math.PI*2);
   ctx.fill();
+
+  // rocks spewed out of the crater, tumbling through the air
+  volcanoRocks.forEach(r => {
+    ctx.save();
+    ctx.translate(r.x, r.y);
+    ctx.rotate(r.rot);
+    ctx.fillStyle = '#3a2a22';
+    ctx.beginPath();
+    ctx.moveTo(-r.size, -r.size*0.6);
+    ctx.lineTo(r.size*0.7, -r.size);
+    ctx.lineTo(r.size, r.size*0.5);
+    ctx.lineTo(-r.size*0.5, r.size);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.restore();
+  });
 }
 
 // Traces a hill/mountain/dune silhouette into the current path (caller does
@@ -1357,6 +1432,36 @@ function drawGround() {
   }
 }
 
+// Draws a transparent glass space-helmet bubble centered at (cx,cy) with the
+// given radii, used on the moon track for both the horse and the rider.
+function drawGlassBubble(cx, cy, rx, ry, rotation) {
+  ctx.save();
+  const glassGrad = ctx.createRadialGradient(cx - rx*0.3, cy - ry*0.4, 1, cx, cy, rx*1.1);
+  glassGrad.addColorStop(0, 'rgba(255,255,255,0.55)');
+  glassGrad.addColorStop(0.4, 'rgba(190,230,255,0.28)');
+  glassGrad.addColorStop(1, 'rgba(140,190,220,0.18)');
+  ctx.fillStyle = glassGrad;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, rotation, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(230,245,255,0.8)';
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+  // bright highlight streak for a glassy shine
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(cx - rx*0.35, cy - ry*0.35, rx*0.35, ry*0.2, rotation - 0.4, 0, Math.PI*1.1);
+  ctx.stroke();
+  // small collar ring at the base to suggest a sealed suit connection
+  ctx.strokeStyle = 'rgba(180,180,190,0.9)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + ry*0.85, rx*0.75, ry*0.22, rotation, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawHorseAndRider() {
   const x = horse.x;
   const y = horse.y;
@@ -1472,6 +1577,11 @@ function drawHorseAndRider() {
   ctx.arc(66.6, -68.6, 0.5, 0, Math.PI*2);
   ctx.fill();
 
+  // on the moon, the horse wears a glass space bubble over its whole head
+  if (selectedTrack === 'moon') {
+    drawGlassBubble(65, -66, 14, 11, -0.15);
+  }
+
   // === Rider ===
   const shirtGrad = ctx.createLinearGradient(33, -70, 51, -46);
   shirtGrad.addColorStop(0, shadeColor(riderColor, 25));
@@ -1520,16 +1630,20 @@ function drawHorseAndRider() {
   ctx.ellipse(47, -70.5, 3, 4.2, 0.3, 0, Math.PI*2);
   ctx.fill();
 
-  // rider helmet/hat
-  ctx.fillStyle = shadeColor(riderColor, -8);
-  ctx.beginPath();
-  ctx.arc(40, -76, 7.5, Math.PI, 0);
-  ctx.fill();
-  ctx.fillRect(33, -76, 15, 3);
-  ctx.fillStyle = shadeColor(riderColor, 30);
-  ctx.beginPath();
-  ctx.arc(37, -78, 2.5, 0, Math.PI*2);
-  ctx.fill();
+  // rider helmet — a glass space bubble on the moon, otherwise the usual cap
+  if (selectedTrack === 'moon') {
+    drawGlassBubble(40, -74, 10, 10, 0);
+  } else {
+    ctx.fillStyle = shadeColor(riderColor, -8);
+    ctx.beginPath();
+    ctx.arc(40, -76, 7.5, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(33, -76, 15, 3);
+    ctx.fillStyle = shadeColor(riderColor, 30);
+    ctx.beginPath();
+    ctx.arc(37, -78, 2.5, 0, Math.PI*2);
+    ctx.fill();
+  }
 
   ctx.restore();
 }
@@ -1901,6 +2015,7 @@ function wireSwatchRow(rowId, dataAttr, onPick, btnClass) {
   });
 }
 wireSwatchRow('trackSwatches', 'data-track', (val) => { selectedTrack = val; }, '.trackBtn');
+wireSwatchRow('difficultySwatches', 'data-difficulty', (val) => { difficulty = val; }, '.trackBtn');
 wireSwatchRow('riderSwatches', 'data-color', (val) => { riderColor = val; });
 wireSwatchRow('hairSwatches', 'data-hair', (val) => { hairColor = val; });
 wireSwatchRow('horseSwatches', 'data-horse', (val) => { horseType = val; });
