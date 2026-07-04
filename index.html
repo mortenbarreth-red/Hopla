@@ -166,6 +166,24 @@
     border-color: #ffcc33;
     box-shadow: 0 0 0 2px #ffcc33;
   }
+  .trackBtn {
+    width: 84px;
+    padding: 10px 6px 8px;
+    border-radius: 12px;
+    border: 3px solid #555;
+    background: rgba(255,255,255,0.06);
+    color: #eee;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    cursor: pointer;
+    touch-action: none;
+    line-height: 1.6;
+  }
+  .trackBtn.selected {
+    border-color: #ffcc33;
+    box-shadow: 0 0 0 2px #ffcc33;
+    background: rgba(255,204,51,0.12);
+  }
   .swatchDotted .dot {
     position:absolute;
     width:7px;
@@ -283,6 +301,15 @@
     <p>Ridderen din galopperer automatisk bortover.<br>
     Trykk HOPP i riktig øyeblikk for å hoppe over hindrene!<br><br>
     (Du kan også bruke mellomromstasten eller trykke hvor som helst på skjermen)</p>
+
+    <div class="colorPickerBlock">
+      <div class="colorPickerLabel">Velg bane</div>
+      <div class="swatchRow" id="trackSwatches">
+        <button class="trackBtn selected" data-track="england">🌍<br>England</button>
+        <button class="trackBtn" data-track="moon">🌙<br>Månen</button>
+        <button class="trackBtn" data-track="desert">🏜️<br>Ørkenen</button>
+      </div>
+    </div>
 
     <div class="colorPickerBlock">
       <div class="colorPickerLabel">Rytterens farge</div>
@@ -453,6 +480,49 @@ let gameOverTimer = 0;
 let riderColor = '#2255cc'; // default matches the pre-selected swatch in the HTML
 let horseType = 'brown';   // default matches the pre-selected swatch in the HTML
 let hairColor = 'black';   // default matches the pre-selected swatch in the HTML
+let selectedTrack = 'england'; // default matches the pre-selected swatch in the HTML
+
+// Track themes: each defines its own sky/ground/hill colors, sky decorations
+// (sun/stars/earth), whether clouds & grass appear, and which obstacle types
+// can spawn there.
+const TRACKS = {
+  england: {
+    label: 'England',
+    obstacleTypes: ['rock','bush','fence','tallFence','wideLog'],
+    sky: ['#3d7fc9', '#6fb0e6', '#bfe4f5'],
+    showSun: true, showStars: false, showEarth: false, showClouds: true, showGrass: true,
+    ground: ['#9c6a37', '#6e451f'], groundContact: '#4d2f16',
+    hill: ['#7ec95a', '#549140'], farHill: ['#9db8d6', '#c3d9e8']
+  },
+  moon: {
+    label: 'Månen',
+    obstacleTypes: ['moonRock', 'crater'],
+    sky: ['#000004', '#080b1a', '#161d38'],
+    showSun: false, showStars: true, showEarth: true, showClouds: false, showGrass: false,
+    ground: ['#9a97a0', '#5f5c66'], groundContact: '#3a3840',
+    hill: ['#8f8c96', '#5a5763'], farHill: ['#6b6874', '#8a8792']
+  },
+  desert: {
+    label: 'Ørkenen',
+    obstacleTypes: ['cactus', 'camel', 'mummy'],
+    sky: ['#e8823a', '#f0a95e', '#fbdf9c'],
+    showSun: true, showStars: false, showEarth: false, showClouds: true, showGrass: false,
+    ground: ['#e0b96a', '#c08f45'], groundContact: '#8a6530',
+    hill: ['#e3c07f', '#c99a54'], farHill: ['#f0d9a8', '#e8c887']
+  }
+};
+function currentTrack() { return TRACKS[selectedTrack] || TRACKS.england; }
+
+// Fixed star field for the moon track (positions randomized once so they
+// don't jump around every frame; they scroll slowly for a parallax feel)
+let moonStars = [];
+function initMoonStars() {
+  moonStars = [];
+  for (let i = 0; i < 40; i++) {
+    moonStars.push({ x: Math.random()*W, y: Math.random()*GROUND_Y*0.8, r: 0.5 + Math.random()*1.2, speed: 0.05 + Math.random()*0.15 });
+  }
+}
+initMoonStars();
 
 const HAIR_COLORS = {
   blond: '#e8c273',
@@ -516,7 +586,9 @@ let nextObstacleTimer = 0;
 let clouds = [];
 let hills = [];
 let farHills = [];
+let pyramids = [];
 let groundOffset = 0;
+const PYRAMID_SPACING = 900;
 
 function initClouds() {
   clouds = [];
@@ -536,9 +608,17 @@ function initFarHills() {
     farHills.push({x: i*300, w: 260, h: 70+Math.random()*50});
   }
 }
+function initPyramids() {
+  // sparse — a pyramid only "once in a while", far in the background
+  pyramids = [];
+  for (let i=0;i<3;i++){
+    pyramids.push({x: 500 + i*PYRAMID_SPACING + Math.random()*250, w: 130+Math.random()*50, h: 85+Math.random()*25});
+  }
+}
 initClouds();
 initHills();
 initFarHills();
+initPyramids();
 updateCloudStatusLine();
 
 function resetGame() {
@@ -554,6 +634,7 @@ function resetGame() {
   initClouds();
   initHills();
   initFarHills();
+  initPyramids();
 }
 
 function scheduleNextObstacle() {
@@ -567,14 +648,16 @@ function scheduleNextObstacle() {
 // below) so every obstacle is always clearable with correct timing, even at
 // the game's slowest speed. Tall ones stay narrow, wide ones stay low.
 function spawnObstacle() {
-  const types = ['rock','bush','fence','tallFence','wideLog'];
+  const types = currentTrack().obstacleTypes;
   const type = types[Math.floor(Math.random()*types.length)];
   let w, h;
-  if (type === 'rock') { w = 28; h = 30; }
+  if (type === 'rock' || type === 'moonRock') { w = 28; h = 30; }
   else if (type === 'bush') { w = 36; h = 26; }
   else if (type === 'fence') { w = 24; h = 40; }
-  else if (type === 'tallFence') { w = 22; h = 66; }   // taller, but narrow
-  else { w = 64; h = 22; }                             // wideLog: wide, but low
+  else if (type === 'tallFence' || type === 'cactus') { w = 22; h = 66; } // taller, but narrow
+  else if (type === 'wideLog' || type === 'crater') { w = 64; h = 22; }  // wide, but low
+  else if (type === 'mummy') { w = 26; h = 48; }                         // standing figure, medium height
+  else { w = 50; h = 34; }                                                // camel
   obstacles.push({x: W + 20, y: GROUND_Y, width: w, height: h, type, passed:false});
 }
 
@@ -737,6 +820,10 @@ function update(dt) {
     c.x -= c.speed * dt;
     if (c.x < -50) c.x = W + 50;
   }
+  for (const s of moonStars) {
+    s.x -= s.speed * dt;
+    if (s.x < 0) s.x += W;
+  }
   for (const h of hills) {
     h.x -= speed*0.3 * dt;
     if (h.x < -200) h.x += 6*220;
@@ -745,31 +832,66 @@ function update(dt) {
     fh.x -= speed*0.12 * dt;
     if (fh.x < -300) fh.x += 5*300;
   }
+  for (const p of pyramids) {
+    p.x -= speed*0.1 * dt;
+    if (p.x < -250) p.x += pyramids.length * PYRAMID_SPACING;
+  }
 
   document.getElementById('scoreDisplay').textContent = score;
   document.getElementById('obstacleDisplay').textContent = obstaclesCleared;
 }
 
 function drawSky() {
+  const theme = currentTrack();
   const grad = ctx.createLinearGradient(0,0,0,GROUND_Y);
-  grad.addColorStop(0, '#3d7fc9');
-  grad.addColorStop(0.55, '#6fb0e6');
-  grad.addColorStop(1, '#bfe4f5');
+  const stops = theme.sky;
+  stops.forEach((color, i) => grad.addColorStop(i / (stops.length - 1), color));
   ctx.fillStyle = grad;
   ctx.fillRect(0,0,W,GROUND_Y+2);
 
-  // sun with soft glow for a bit of atmosphere/light direction
-  const sunX = W*0.8, sunY = 70;
-  const glow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 90);
-  glow.addColorStop(0, 'rgba(255,250,210,0.9)');
-  glow.addColorStop(0.4, 'rgba(255,250,210,0.35)');
-  glow.addColorStop(1, 'rgba(255,250,210,0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(sunX-90, sunY-90, 180, 180);
-  ctx.fillStyle = '#fff6d6';
-  ctx.beginPath();
-  ctx.arc(sunX, sunY, 26, 0, Math.PI*2);
-  ctx.fill();
+  if (theme.showStars) {
+    ctx.fillStyle = '#ffffff';
+    for (const s of moonStars) {
+      ctx.globalAlpha = 0.6 + 0.4*Math.sin((frame + s.x) * 0.02);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  if (theme.showEarth) {
+    const ex = W*0.78, ey = 65;
+    const eGlow = ctx.createRadialGradient(ex, ey, 0, ex, ey, 50);
+    eGlow.addColorStop(0, 'rgba(120,170,255,0.35)');
+    eGlow.addColorStop(1, 'rgba(120,170,255,0)');
+    ctx.fillStyle = eGlow;
+    ctx.fillRect(ex-50, ey-50, 100, 100);
+    ctx.fillStyle = '#3f6fd8';
+    ctx.beginPath();
+    ctx.arc(ex, ey, 22, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(90,180,110,0.85)';
+    ctx.beginPath();
+    ctx.arc(ex-7, ey-5, 8, 0, Math.PI*2);
+    ctx.arc(ex+8, ey+7, 6, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  if (theme.showSun) {
+    // sun with soft glow for a bit of atmosphere/light direction
+    const sunX = W*0.8, sunY = selectedTrack === 'desert' ? 110 : 70;
+    const glow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 90);
+    glow.addColorStop(0, 'rgba(255,250,210,0.9)');
+    glow.addColorStop(0.4, 'rgba(255,250,210,0.35)');
+    glow.addColorStop(1, 'rgba(255,250,210,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(sunX-90, sunY-90, 180, 180);
+    ctx.fillStyle = '#fff6d6';
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 26, 0, Math.PI*2);
+    ctx.fill();
+  }
 }
 
 function drawCloud(c) {
@@ -788,58 +910,125 @@ function drawCloud(c) {
   ctx.fill();
 }
 
+// Traces a hill/mountain/dune silhouette into the current path (caller does
+// fill/stroke). 'rounded' = England's soft green hills, 'jagged' = the
+// moon's rocky peaks, 'dune' = the desert's wind-sculpted dune profile.
+function traceHillShape(x, w, h, style) {
+  ctx.moveTo(x, GROUND_Y);
+  if (style === 'jagged') {
+    ctx.lineTo(x + w*0.12, GROUND_Y - h*0.45);
+    ctx.lineTo(x + w*0.28, GROUND_Y - h*0.7);
+    ctx.lineTo(x + w*0.42, GROUND_Y - h*0.38);
+    ctx.lineTo(x + w*0.58, GROUND_Y - h);
+    ctx.lineTo(x + w*0.75, GROUND_Y - h*0.5);
+    ctx.lineTo(x + w*0.88, GROUND_Y - h*0.68);
+    ctx.lineTo(x + w, GROUND_Y);
+  } else if (style === 'dune') {
+    ctx.quadraticCurveTo(x + w*0.5, GROUND_Y - h, x + w*0.72, GROUND_Y - h*0.8);
+    ctx.quadraticCurveTo(x + w*0.92, GROUND_Y - h*0.35, x + w, GROUND_Y);
+  } else { // rounded
+    ctx.quadraticCurveTo(x + w/2, GROUND_Y - h, x + w, GROUND_Y);
+  }
+  ctx.closePath();
+}
+function hillStyleFor(track) {
+  if (track === 'moon') return 'jagged';
+  if (track === 'desert') return 'dune';
+  return 'rounded';
+}
+
 function drawFarHills() {
   // hazy distant mountains, lighter/cooler tone = atmospheric perspective
+  const [top, bottom] = currentTrack().farHill;
+  const style = hillStyleFor(selectedTrack);
   for (const fh of farHills) {
     const grad = ctx.createLinearGradient(0, GROUND_Y - fh.h, 0, GROUND_Y);
-    grad.addColorStop(0, '#9db8d6');
-    grad.addColorStop(1, '#c3d9e8');
+    grad.addColorStop(0, top);
+    grad.addColorStop(1, bottom);
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.moveTo(fh.x, GROUND_Y);
-    ctx.quadraticCurveTo(fh.x + fh.w*0.5, GROUND_Y - fh.h, fh.x + fh.w, GROUND_Y);
-    ctx.closePath();
+    traceHillShape(fh.x, fh.w, fh.h, style);
     ctx.fill();
   }
 }
 
-function drawHills() {
-  for (const h of hills) {
-    const grad = ctx.createLinearGradient(0, GROUND_Y - h.h, 0, GROUND_Y);
-    grad.addColorStop(0, '#7ec95a');
-    grad.addColorStop(1, '#549140');
-    ctx.fillStyle = grad;
+function drawPyramids() {
+  if (selectedTrack !== 'desert') return;
+  const baseY = GROUND_Y - 4;
+  for (const p of pyramids) {
+    const topX = p.x + p.w/2, topY = baseY - p.h;
+    ctx.fillStyle = '#d9b877';
     ctx.beginPath();
-    ctx.moveTo(h.x, GROUND_Y);
-    ctx.quadraticCurveTo(h.x + h.w/2, GROUND_Y - h.h, h.x + h.w, GROUND_Y);
+    ctx.moveTo(topX, topY);
+    ctx.lineTo(p.x + p.w, baseY);
+    ctx.lineTo(topX, baseY);
     ctx.closePath();
     ctx.fill();
-    // sunlit highlight edge for a bit of roundness
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.lineWidth = 3;
+    ctx.fillStyle = '#b08a52';
     ctx.beginPath();
-    ctx.moveTo(h.x + h.w*0.15, GROUND_Y - h.h*0.55);
-    ctx.quadraticCurveTo(h.x + h.w/2, GROUND_Y - h.h, h.x + h.w*0.85, GROUND_Y - h.h*0.55);
+    ctx.moveTo(topX, topY);
+    ctx.lineTo(p.x, baseY);
+    ctx.lineTo(topX, baseY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(p.x, baseY);
+    ctx.lineTo(topX, topY);
+    ctx.lineTo(p.x + p.w, baseY);
     ctx.stroke();
   }
 }
 
+function drawHills() {
+  const [top, bottom] = currentTrack().hill;
+  const style = hillStyleFor(selectedTrack);
+  for (const h of hills) {
+    const grad = ctx.createLinearGradient(0, GROUND_Y - h.h, 0, GROUND_Y);
+    grad.addColorStop(0, top);
+    grad.addColorStop(1, bottom);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    traceHillShape(h.x, h.w, h.h, style);
+    ctx.fill();
+    if (style === 'rounded') {
+      // sunlit highlight edge for a bit of roundness
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(h.x + h.w*0.15, GROUND_Y - h.h*0.55);
+      ctx.quadraticCurveTo(h.x + h.w/2, GROUND_Y - h.h, h.x + h.w*0.85, GROUND_Y - h.h*0.55);
+      ctx.stroke();
+    } else if (style === 'dune') {
+      // crest highlight along the ridge of the dune
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(h.x + h.w*0.1, GROUND_Y - h.h*0.35);
+      ctx.quadraticCurveTo(h.x + h.w*0.5, GROUND_Y - h.h, h.x + h.w*0.72, GROUND_Y - h.h*0.8);
+      ctx.stroke();
+    }
+  }
+}
+
 function drawGround() {
-  // main dirt with a light-to-dark gradient so it reads as receding ground
+  const theme = currentTrack();
+  // main ground with a light-to-dark gradient so it reads as receding
   const grad = ctx.createLinearGradient(0, GROUND_Y, 0, H);
-  grad.addColorStop(0, '#9c6a37');
-  grad.addColorStop(1, '#6e451f');
+  grad.addColorStop(0, theme.ground[0]);
+  grad.addColorStop(1, theme.ground[1]);
   ctx.fillStyle = grad;
   ctx.fillRect(0, GROUND_Y, W, H-GROUND_Y);
 
   // dark contact line where ground meets sky/hills, grounds everything visually
-  ctx.fillStyle = '#4d2f16';
+  ctx.fillStyle = theme.groundContact;
   ctx.fillRect(0, GROUND_Y, W, 4);
   ctx.fillStyle = 'rgba(255,255,255,0.12)';
   ctx.fillRect(0, GROUND_Y+4, W, 2);
 
   // dashed texture moving
-  ctx.fillStyle = '#7a4a20';
+  ctx.fillStyle = shadeColor(theme.ground[1], 10);
   for (let x = groundOffset; x < W; x += 40) {
     ctx.fillRect(x, GROUND_Y+16, 20, 5);
   }
@@ -848,26 +1037,62 @@ function drawGround() {
     ctx.fillRect(x, GROUND_Y+21, 20, 2);
   }
 
-  // grass tufts with a subtle highlight for a bit of dimension
-  ctx.strokeStyle = '#3d6423';
-  ctx.lineWidth = 2.5;
-  for (let x = groundOffset; x < W; x += 55) {
-    ctx.beginPath();
-    ctx.moveTo(x, GROUND_Y);
-    ctx.lineTo(x-3, GROUND_Y-8);
-    ctx.moveTo(x+4, GROUND_Y);
-    ctx.lineTo(x+7, GROUND_Y-10);
-    ctx.moveTo(x+8, GROUND_Y);
-    ctx.lineTo(x+10, GROUND_Y-6);
-    ctx.stroke();
-  }
-  ctx.strokeStyle = '#6ab04c';
-  ctx.lineWidth = 1;
-  for (let x = groundOffset; x < W; x += 55) {
-    ctx.beginPath();
-    ctx.moveTo(x+7, GROUND_Y-10);
-    ctx.lineTo(x+6, GROUND_Y-7);
-    ctx.stroke();
+  if (theme.showGrass) {
+    // grass tufts with a subtle highlight for a bit of dimension
+    ctx.strokeStyle = '#3d6423';
+    ctx.lineWidth = 2.5;
+    for (let x = groundOffset; x < W; x += 55) {
+      ctx.beginPath();
+      ctx.moveTo(x, GROUND_Y);
+      ctx.lineTo(x-3, GROUND_Y-8);
+      ctx.moveTo(x+4, GROUND_Y);
+      ctx.lineTo(x+7, GROUND_Y-10);
+      ctx.moveTo(x+8, GROUND_Y);
+      ctx.lineTo(x+10, GROUND_Y-6);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#6ab04c';
+    ctx.lineWidth = 1;
+    for (let x = groundOffset; x < W; x += 55) {
+      ctx.beginPath();
+      ctx.moveTo(x+7, GROUND_Y-10);
+      ctx.lineTo(x+6, GROUND_Y-7);
+      ctx.stroke();
+    }
+  } else if (selectedTrack === 'moon') {
+    // crater dimples
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1.5;
+    for (let x = groundOffset; x < W; x += 48) {
+      ctx.beginPath();
+      ctx.ellipse(x+10, GROUND_Y+30, 6, 2.5, 0, 0, Math.PI*2);
+      ctx.stroke();
+    }
+    // scattered rocky pebbles of varying size, with a lit top edge for
+    // a bit of texture — makes the ground read as clearly rocky, not just gray
+    for (let x = groundOffset - 20; x < W; x += 33) {
+      const seed = Math.abs(Math.sin(x*0.13)) ; // deterministic pseudo-random per x
+      const ry = GROUND_Y + 10 + seed*14;
+      const rr = 2 + seed*3;
+      ctx.fillStyle = '#4a4750';
+      ctx.beginPath();
+      ctx.ellipse(x, ry, rr, rr*0.75, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.beginPath();
+      ctx.ellipse(x - rr*0.3, ry - rr*0.3, rr*0.4, rr*0.3, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+  } else if (selectedTrack === 'desert') {
+    // wind-blown sand ripples instead of grass
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 1.5;
+    for (let x = groundOffset; x < W; x += 50) {
+      ctx.beginPath();
+      ctx.moveTo(x, GROUND_Y+32);
+      ctx.quadraticCurveTo(x+12, GROUND_Y+27, x+24, GROUND_Y+32);
+      ctx.stroke();
+    }
   }
 }
 
@@ -1073,6 +1298,43 @@ function drawObstacle(o) {
     ctx.strokeStyle = 'rgba(0,0,0,0.35)';
     ctx.lineWidth = 1;
     ctx.stroke();
+  } else if (o.type === 'moonRock') {
+    const grad = ctx.createLinearGradient(4, -o.height, o.width, 0);
+    grad.addColorStop(0, '#d8d5da');
+    grad.addColorStop(1, '#8a8690');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(5,-o.height*0.8);
+    ctx.lineTo(o.width*0.45,-o.height);
+    ctx.lineTo(o.width-5,-o.height*0.7);
+    ctx.lineTo(o.width,0);
+    ctx.closePath();
+    ctx.fill();
+    // crater pockmarks for a lunar-rock look
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.arc(o.width*0.35, -o.height*0.35, 2.5, 0, Math.PI*2);
+    ctx.arc(o.width*0.6, -o.height*0.55, 2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  } else if (o.type === 'crater') {
+    // a shallow depression in the ground, flush with the surface
+    const grad = ctx.createRadialGradient(o.width/2, 2, 2, o.width/2, 2, o.width*0.5);
+    grad.addColorStop(0, '#1c1a20');
+    grad.addColorStop(0.7, '#3a3742');
+    grad.addColorStop(1, '#6b6874');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(o.width/2, 2, o.width/2, o.height/2, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(o.width/2, 2, o.width*0.48, o.height*0.46, 0, Math.PI*1.1, Math.PI*1.9);
+    ctx.stroke();
   } else if (o.type === 'bush') {
     const grad = ctx.createLinearGradient(0, -o.height, o.width*0.3, 0);
     grad.addColorStop(0, '#4caf50');
@@ -1085,6 +1347,120 @@ function drawObstacle(o) {
     ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.2)';
     ctx.lineWidth = 1;
+    ctx.stroke();
+  } else if (o.type === 'cactus') {
+    const grad = ctx.createLinearGradient(0, -o.height, o.width, 0);
+    grad.addColorStop(0, '#4c9a4c');
+    grad.addColorStop(1, '#2e6b2e');
+    ctx.fillStyle = grad;
+    // main trunk
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.35, 0);
+    ctx.quadraticCurveTo(o.width*0.25, -o.height*0.5, o.width*0.35, -o.height);
+    ctx.quadraticCurveTo(o.width*0.5, -o.height*1.05, o.width*0.65, -o.height);
+    ctx.quadraticCurveTo(o.width*0.75, -o.height*0.5, o.width*0.65, 0);
+    ctx.closePath();
+    ctx.fill();
+    // left arm
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.35, -o.height*0.55);
+    ctx.quadraticCurveTo(0, -o.height*0.55, 2, -o.height*0.8);
+    ctx.quadraticCurveTo(6, -o.height*0.85, o.width*0.32, -o.height*0.7);
+    ctx.closePath();
+    ctx.fill();
+    // right arm
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.65, -o.height*0.4);
+    ctx.quadraticCurveTo(o.width, -o.height*0.4, o.width-2, -o.height*0.65);
+    ctx.quadraticCurveTo(o.width-6, -o.height*0.7, o.width*0.68, -o.height*0.55);
+    ctx.closePath();
+    ctx.fill();
+    // spine texture
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1;
+    for (let sy = -4; sy > -o.height+6; sy -= 8) {
+      ctx.beginPath();
+      ctx.moveTo(o.width*0.35, sy);
+      ctx.lineTo(o.width*0.65, sy);
+      ctx.stroke();
+    }
+  } else if (o.type === 'camel') {
+    const grad = ctx.createLinearGradient(0, -o.height, 0, 0);
+    grad.addColorStop(0, '#d9b077');
+    grad.addColorStop(1, '#a97c45');
+    ctx.fillStyle = grad;
+    // body
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.45, -o.height*0.35, o.width*0.42, o.height*0.4, 0, 0, Math.PI*2);
+    ctx.fill();
+    // hump
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.45, -o.height*0.75, o.width*0.22, o.height*0.32, 0, 0, Math.PI*2);
+    ctx.fill();
+    // neck + head
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.78, -o.height*0.3);
+    ctx.quadraticCurveTo(o.width*0.98, -o.height*0.55, o.width*0.94, -o.height*0.85);
+    ctx.quadraticCurveTo(o.width*0.9, -o.height*0.95, o.width*0.82, -o.height*0.9);
+    ctx.quadraticCurveTo(o.width*0.84, -o.height*0.6, o.width*0.68, -o.height*0.35);
+    ctx.closePath();
+    ctx.fill();
+    // legs
+    ctx.strokeStyle = shadeColor('#a97c45', -15);
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.25, -o.height*0.1); ctx.lineTo(o.width*0.22, 0);
+    ctx.moveTo(o.width*0.6, -o.height*0.05); ctx.lineTo(o.width*0.62, 0);
+    ctx.stroke();
+    // eye
+    ctx.fillStyle = '#2a1a10';
+    ctx.beginPath();
+    ctx.arc(o.width*0.88, -o.height*0.85, 1.3, 0, Math.PI*2);
+    ctx.fill();
+  } else if (o.type === 'mummy') {
+    const wrapGrad = ctx.createLinearGradient(0, -o.height, o.width, 0);
+    wrapGrad.addColorStop(0, '#e8dfc4');
+    wrapGrad.addColorStop(1, '#c2b48f');
+    ctx.fillStyle = wrapGrad;
+    // body (slightly tapered, arms held close/out at the sides)
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.3, 0);
+    ctx.quadraticCurveTo(o.width*0.15, -o.height*0.5, o.width*0.28, -o.height*0.82);
+    ctx.quadraticCurveTo(o.width*0.5, -o.height*0.92, o.width*0.72, -o.height*0.82);
+    ctx.quadraticCurveTo(o.width*0.85, -o.height*0.5, o.width*0.7, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // head wrap
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.5, -o.height*0.92, o.width*0.24, o.height*0.13, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+    // bandage wrap lines criss-crossing the body
+    ctx.strokeStyle = 'rgba(120,105,70,0.5)';
+    ctx.lineWidth = 1.3;
+    for (let wy = -o.height*0.15; wy > -o.height*0.85; wy -= o.height*0.14) {
+      ctx.beginPath();
+      ctx.moveTo(o.width*0.18, wy);
+      ctx.lineTo(o.width*0.82, wy + o.height*0.06);
+      ctx.stroke();
+    }
+    // dark eye slits peeking through the wrap
+    ctx.fillStyle = '#1a1410';
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.42, -o.height*0.88, 2, 1.2, 0, 0, Math.PI*2);
+    ctx.ellipse(o.width*0.58, -o.height*0.88, 2, 1.2, 0, 0, Math.PI*2);
+    ctx.fill();
+    // one arm reaching forward, classic mummy pose
+    ctx.strokeStyle = '#d8cca8';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.68, -o.height*0.6);
+    ctx.lineTo(o.width*0.95, -o.height*0.45);
     ctx.stroke();
   } else if (o.type === 'fence') {
     const postGrad = ctx.createLinearGradient(0, -o.height, 7, -o.height);
@@ -1150,8 +1526,9 @@ function drawObstacle(o) {
 
 function draw() {
   drawSky();
-  clouds.forEach(drawCloud);
+  if (currentTrack().showClouds) clouds.forEach(drawCloud);
   drawFarHills();
+  drawPyramids();
   drawHills();
   drawGround();
   obstacles.forEach(drawObstacle);
@@ -1190,9 +1567,9 @@ document.getElementById('startBtn').addEventListener('click', (e)=>{ e.preventDe
 document.getElementById('startBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); startGame(); }, {passive:false});
 
 // Color swatch pickers on the start screen
-function wireSwatchRow(rowId, dataAttr, onPick) {
+function wireSwatchRow(rowId, dataAttr, onPick, btnClass) {
   const row = document.getElementById(rowId);
-  const buttons = row.querySelectorAll('.swatch');
+  const buttons = row.querySelectorAll(btnClass || '.swatch');
   function pick(btn) {
     buttons.forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
@@ -1203,6 +1580,7 @@ function wireSwatchRow(rowId, dataAttr, onPick) {
     btn.addEventListener('touchstart', (e) => { e.preventDefault(); pick(btn); }, {passive:false});
   });
 }
+wireSwatchRow('trackSwatches', 'data-track', (val) => { selectedTrack = val; }, '.trackBtn');
 wireSwatchRow('riderSwatches', 'data-color', (val) => { riderColor = val; });
 wireSwatchRow('hairSwatches', 'data-hair', (val) => { hairColor = val; });
 wireSwatchRow('horseSwatches', 'data-horse', (val) => { horseType = val; });
