@@ -156,8 +156,11 @@
   }
   .swatchRow {
     display:flex;
+    flex-wrap: wrap;
     gap: 12px;
     justify-content:center;
+    max-width: 340px;
+    margin: 0 auto;
   }
   .swatch {
     position:relative;
@@ -197,6 +200,9 @@
     height:7px;
     border-radius:50%;
     background:#111;
+  }
+  .swatchDotted .dot.brownDot {
+    background:#8b5a2b;
   }
   #nameEntryBlock {
     display:flex;
@@ -318,6 +324,7 @@
         <button class="trackBtn" data-track="volcano">🌋<br>Vulkanen</button>
         <button class="trackBtn" data-track="africa">🦁<br>Afrika</button>
         <button class="trackBtn" data-track="norway">🇳🇴<br>Norge</button>
+        <button class="trackBtn" data-track="australia">🦘<br>Australia</button>
       </div>
     </div>
 
@@ -357,6 +364,11 @@
           <span class="dot" style="top:5px;left:6px"></span>
           <span class="dot" style="top:16px;left:18px"></span>
           <span class="dot" style="top:22px;left:8px"></span>
+        </button>
+        <button class="swatch swatchDotted" data-horse="whiteBrownSpots" style="background:#f0f0ec" aria-label="Hvit med brune flekker">
+          <span class="dot brownDot" style="top:5px;left:6px"></span>
+          <span class="dot brownDot" style="top:16px;left:18px"></span>
+          <span class="dot brownDot" style="top:22px;left:8px"></span>
         </button>
         <button class="swatch selected" data-horse="brown" style="background:#8b5a2b" aria-label="Brun"></button>
         <button class="swatch" data-horse="gold" style="background:#d4af37" aria-label="Gull"></button>
@@ -562,9 +574,26 @@ const TRACKS = {
     showSun: false, showStars: true, showEarth: false, showClouds: false, showGrass: false,
     ground: ['#eef3f7', '#c7d6e0'], groundContact: '#9fb2bf',
     hill: ['#d8e6ee', '#a9bfcc'], farHill: ['#e8f1f6', '#c3d5e0']
+  },
+  australia: {
+    label: 'Australia',
+    obstacleTypes: ['kangaroo', 'crocodile', 'emu', 'tumbleweed'],
+    sky: ['#3d7ec7', '#7ab8e0', '#f2d9a0'],
+    showSun: true, showStars: false, showEarth: false, showClouds: true, showGrass: false,
+    ground: ['#c76b3f', '#a34f2a'], groundContact: '#7a3a1e',
+    hill: ['#c17a45', '#96562c'], farHill: ['#dba06a', '#c88854']
   }
 };
 const VOLCANO_HEIGHT = 210; // fixed geometry for the always-centered volcano
+
+// Kangaroo hop cycle: mostly grounded (jump over it), then a brief leap into
+// the air (run under it instead). The horse's own jump peaks at 125px
+// (JUMP_FORCE^2 / (2*GRAVITY) = 15^2/1.8), so the kangaroo hops a bit higher
+// than that to guarantee a real, comfortable window to run underneath.
+const KANGAROO_HOP_PERIOD = 100;      // frames for one full hop cycle
+const KANGAROO_GROUND_FRACTION = 0.55; // portion of the cycle spent grounded
+const KANGAROO_MAX_HOP = 140;          // peak height lifted off the ground
+const KANGAROO_HOP_SPEED = 2.2;        // extra leftward speed while airborne, like a real leap
 function currentTrack() { return TRACKS[selectedTrack] || TRACKS.england; }
 
 // Fixed star field for the moon track (positions randomized once so they
@@ -653,7 +682,8 @@ function shadeColor(hex, percent) {
 
 const HORSE_PALETTES = {
   white:      { body: '#f0f0ec', mane: '#c9c9c2', muzzle: '#d8d5cc', spots:false },
-  whiteSpots: { body: '#f0f0ec', mane: '#c9c9c2', muzzle: '#d8d5cc', spots:true  },
+  whiteSpots: { body: '#f0f0ec', mane: '#c9c9c2', muzzle: '#d8d5cc', spots:true, spotColor:'#1a1a1a' },
+  whiteBrownSpots: { body: '#f0f0ec', mane: '#c9c9c2', muzzle: '#d8d5cc', spots:true, spotColor:'#8b5a2b' },
   brown:      { body: '#8b5a2b', mane: '#4a2f18', muzzle: '#6b4423', spots:false },
   gold:       { body: '#d4af37', mane: '#8a6d1f', muzzle: '#b8912b', spots:false }
 };
@@ -682,10 +712,12 @@ let farHills = [];
 let pyramids = [];
 let villages = [];
 let norwayLandmarks = [];
+let uluruRocks = [];
 let groundOffset = 0;
 const PYRAMID_SPACING = 900;
 const VILLAGE_SPACING = 700;
 const NORWAY_LANDMARK_SPACING = 750;
+const ULURU_SPACING = 1000;
 
 function initClouds() {
   clouds = [];
@@ -729,12 +761,20 @@ function initNorwayLandmarks() {
     });
   }
 }
+function initUluru() {
+  // Uluru shows up only "once in a while", far in the outback background
+  uluruRocks = [];
+  for (let i=0;i<2;i++){
+    uluruRocks.push({x: 600 + i*ULURU_SPACING + Math.random()*300, w: 340+Math.random()*100, h: 150+Math.random()*40});
+  }
+}
 initClouds();
 initHills();
 initFarHills();
 initPyramids();
 initVillages();
 initNorwayLandmarks();
+initUluru();
 updateCloudStatusLine();
 
 function resetGame() {
@@ -753,6 +793,7 @@ function resetGame() {
   initPyramids();
   initVillages();
   initNorwayLandmarks();
+  initUluru();
   resetUfos();
   resetVolcanoSmoke();
   resetVolcanoRocks();
@@ -786,10 +827,21 @@ function spawnObstacle() {
   else if (type === 'crocodile') { w = 58; h = 18; }                     // long and low
   else if (type === 'moose' || type === 'polarBear') { w = (type==='moose'?30:42); h = (type==='moose'?60:32); }
   else if (type === 'wolf') { w = 38; h = 26; }
+  else if (type === 'kangaroo') { w = 32; h = 38; }
+  else if (type === 'emu') { w = 28; h = 55; }
+  else if (type === 'tumbleweed') { w = 34; h = 34; }
   else { w = 50; h = 34; }                                                // camel
   const sizeMul = currentDifficulty().sizeMul;
   w *= sizeMul; h *= sizeMul;
-  obstacles.push({x: W + 20, y: GROUND_Y, width: w, height: h, type, passed:false});
+  const obstacle = {x: W + 20, y: GROUND_Y, width: w, height: h, type, passed:false};
+  if (type === 'kangaroo') {
+    // Randomize the starting phase so different kangaroos are at different
+    // points in their hop cycle by the time they reach the rider — otherwise
+    // the travel time is nearly constant and every kangaroo arrives at the
+    // same phase, making one solution (jump) always correct.
+    obstacle.hopT = Math.random() * KANGAROO_HOP_PERIOD;
+  }
+  obstacles.push(obstacle);
 }
 
 function doJump() {
@@ -931,6 +983,20 @@ function update(dt) {
   for (let i = obstacles.length-1; i>=0; i--) {
     const o = obstacles[i];
     o.x -= speed * dt;
+    if (o.type === 'kangaroo') {
+      // Kangaroos spend most of the cycle on the ground (jump over them),
+      // then leap into the air for a while (run under them instead).
+      o.hopT = (o.hopT || 0) + dt;
+      const cyclePos = (o.hopT % KANGAROO_HOP_PERIOD) / KANGAROO_HOP_PERIOD;
+      if (cyclePos < KANGAROO_GROUND_FRACTION) {
+        o.yOffset = 0;
+      } else {
+        const airPos = (cyclePos - KANGAROO_GROUND_FRACTION) / (1 - KANGAROO_GROUND_FRACTION);
+        o.yOffset = KANGAROO_MAX_HOP * Math.sin(airPos * Math.PI);
+        // leaps forward (left) extra while airborne, like a real hop
+        o.x -= KANGAROO_HOP_SPEED * dt;
+      }
+    }
     if (!o.passed && o.x + o.width < horse.x) {
       o.passed = true;
       score += 10;
@@ -942,7 +1008,8 @@ function update(dt) {
   // collision (a bit forgiving hitbox)
   const hb = { x: horse.x+14, y: horse.y - horse.height + 14, w: horse.width-24, h: horse.height-14 };
   for (const o of obstacles) {
-    const ob = { x: o.x+4, y: o.y - o.height, w: o.width-8, h: o.height };
+    const oy = o.y - (o.yOffset || 0); // kangaroos lift off the ground when hopping
+    const ob = { x: o.x+4, y: oy - o.height, w: o.width-8, h: o.height };
     if (hb.x < ob.x + ob.w && hb.x + hb.w > ob.x &&
         hb.y < ob.y + ob.h && hb.y + hb.h > ob.y) {
       endGame();
@@ -1039,6 +1106,10 @@ function update(dt) {
   for (const p of pyramids) {
     p.x -= speed*0.1 * dt;
     if (p.x < -250) p.x += pyramids.length * PYRAMID_SPACING;
+  }
+  for (const u of uluruRocks) {
+    u.x -= speed*0.1 * dt;
+    if (u.x < -300) u.x += uluruRocks.length * ULURU_SPACING;
   }
   for (const v of villages) {
     v.x -= speed*0.45 * dt;
@@ -1362,6 +1433,33 @@ function drawPyramids() {
   }
 }
 
+function drawUluru() {
+  if (selectedTrack !== 'australia') return;
+  const baseY = GROUND_Y - 4;
+  uluruRocks.forEach(u => {
+    const grad = ctx.createLinearGradient(0, baseY - u.h, 0, baseY);
+    grad.addColorStop(0, '#c1512c');
+    grad.addColorStop(1, '#8a3a1e');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(u.x, baseY);
+    ctx.quadraticCurveTo(u.x + u.w*0.15, baseY - u.h*0.9, u.x + u.w*0.4, baseY - u.h);
+    ctx.quadraticCurveTo(u.x + u.w*0.65, baseY - u.h*0.95, u.x + u.w*0.85, baseY - u.h*0.6);
+    ctx.quadraticCurveTo(u.x + u.w, baseY - u.h*0.3, u.x + u.w, baseY);
+    ctx.closePath();
+    ctx.fill();
+    // horizontal striations, characteristic of Uluru's weathered rock face
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 1.5;
+    for (let s = 0; s < 4; s++) {
+      const sy = baseY - u.h*0.2 - s*u.h*0.18;
+      ctx.beginPath();
+      ctx.moveTo(u.x + u.w*0.05, sy);
+      ctx.lineTo(u.x + u.w*0.9, sy - u.h*0.05);
+      ctx.stroke();
+    }
+  });
+}
 function drawVillages() {
   if (selectedTrack !== 'africa') return;
   const baseY = GROUND_Y - 3;
@@ -1656,6 +1754,23 @@ function drawGround() {
       ctx.quadraticCurveTo(x+14, GROUND_Y+27, x+28, GROUND_Y+32);
       ctx.stroke();
     }
+  } else if (selectedTrack === 'australia') {
+    // reddish outback sand ripples
+    ctx.strokeStyle = 'rgba(255,200,150,0.25)';
+    ctx.lineWidth = 1.5;
+    for (let x = groundOffset; x < W; x += 48) {
+      ctx.beginPath();
+      ctx.moveTo(x, GROUND_Y+30);
+      ctx.quadraticCurveTo(x+11, GROUND_Y+25, x+22, GROUND_Y+30);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    for (let x = groundOffset+10; x < W; x += 48) {
+      ctx.beginPath();
+      ctx.moveTo(x, GROUND_Y+35);
+      ctx.quadraticCurveTo(x+11, GROUND_Y+30, x+22, GROUND_Y+35);
+      ctx.stroke();
+    }
   }
 }
 
@@ -1740,7 +1855,7 @@ function drawHorseAndRider() {
 
   // spots (dalmatian-style variant only)
   if (palette.spots) {
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = palette.spotColor || '#1a1a1a';
     const spotPositions = [[24,-40,4.5],[36,-30,5.5],[48,-38,4],[30,-24,3.5],[54,-28,3.5]];
     for (const [sx, sy, sr] of spotPositions) {
       ctx.beginPath();
@@ -1877,7 +1992,7 @@ function drawHorseAndRider() {
 
 function drawObstacle(o) {
   ctx.save();
-  ctx.translate(o.x, o.y);
+  ctx.translate(o.x, o.y - (o.yOffset || 0));
 
   // These animals were drawn facing right; flip them so they face left,
   // toward the oncoming rider, which reads much more naturally.
@@ -1888,10 +2003,13 @@ function drawObstacle(o) {
     ctx.scale(-1, 1);
   }
 
-  // drop shadow grounds every obstacle type consistently
+  // drop shadow grounds every obstacle type consistently — stays on the
+  // actual ground line even if the obstacle itself is lifted up (kangaroo)
+  const groundLocalY = (o.yOffset || 0) + 3;
+  const shadowShrink = Math.max(0.5, 1 - (o.yOffset || 0)/120);
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.ellipse(o.width/2, 3, o.width*0.5, 5, 0, 0, Math.PI*2);
+  ctx.ellipse(o.width/2, groundLocalY, o.width*0.5*shadowShrink, 5*shadowShrink, 0, 0, Math.PI*2);
   ctx.fill();
 
   if (o.type === 'rock') {
@@ -2333,6 +2451,114 @@ function drawObstacle(o) {
     ctx.beginPath();
     ctx.arc(o.width*0.83, -o.height*0.6, 1.3, 0, Math.PI*2);
     ctx.fill();
+  } else if (o.type === 'kangaroo') {
+    const grad = ctx.createLinearGradient(0, -o.height, o.width, 0);
+    grad.addColorStop(0, '#c99a6a');
+    grad.addColorStop(1, '#8f6a42');
+    // tail trailing behind (to the right)
+    ctx.strokeStyle = '#8f6a42';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.85, -o.height*0.3);
+    ctx.quadraticCurveTo(o.width*1.15, -o.height*0.15, o.width*1.08, 0);
+    ctx.stroke();
+    // big hind leg
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.7, -o.height*0.18, o.width*0.22, o.height*0.16, -0.3, 0, Math.PI*2);
+    ctx.fill();
+    // body
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.55, -o.height*0.55, o.width*0.28, o.height*0.38, 0.1, 0, Math.PI*2);
+    ctx.fill();
+    // head, facing left
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.25, -o.height*0.82, o.width*0.16, o.height*0.16, 0, 0, Math.PI*2);
+    ctx.fill();
+    // ear
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.3, -o.height*0.98, 4, 7, 0.3, 0, Math.PI*2);
+    ctx.fill();
+    // small arm
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.4, -o.height*0.6);
+    ctx.lineTo(o.width*0.32, -o.height*0.48);
+    ctx.stroke();
+    // small front foot near the ground
+    ctx.strokeStyle = '#7a5a36';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.3, -o.height*0.1);
+    ctx.lineTo(o.width*0.28, 0);
+    ctx.stroke();
+    // eye
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(o.width*0.18, -o.height*0.85, 1.3, 0, Math.PI*2);
+    ctx.fill();
+  } else if (o.type === 'emu') {
+    ctx.fillStyle = '#4a4238';
+    // body
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.6, -o.height*0.3, o.width*0.35, o.height*0.22, 0, 0, Math.PI*2);
+    ctx.fill();
+    // long neck curving up, head facing left
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.45, -o.height*0.4);
+    ctx.quadraticCurveTo(o.width*0.3, -o.height*0.75, o.width*0.38, -o.height);
+    ctx.quadraticCurveTo(o.width*0.42, -o.height*1.05, o.width*0.5, -o.height*0.98);
+    ctx.quadraticCurveTo(o.width*0.45, -o.height*0.7, o.width*0.58, -o.height*0.42);
+    ctx.closePath();
+    ctx.fill();
+    // beak
+    ctx.fillStyle = '#8a7a5a';
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.38, -o.height);
+    ctx.lineTo(o.width*0.24, -o.height*0.97);
+    ctx.lineTo(o.width*0.4, -o.height*0.93);
+    ctx.closePath();
+    ctx.fill();
+    // legs
+    ctx.strokeStyle = '#8a7a5a';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.5, -o.height*0.12); ctx.lineTo(o.width*0.52, 0);
+    ctx.moveTo(o.width*0.7, -o.height*0.1); ctx.lineTo(o.width*0.68, 0);
+    ctx.stroke();
+    // eye
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(o.width*0.42, -o.height*0.98, 1.2, 0, Math.PI*2);
+    ctx.fill();
+  } else if (o.type === 'tumbleweed') {
+    ctx.save();
+    ctx.translate(o.width/2, -o.height/2);
+    ctx.rotate(frame*0.05); // spins slowly as if rolling along
+    ctx.strokeStyle = '#8a6a3a';
+    ctx.lineWidth = 1.5;
+    const spikes = 10;
+    for (let i = 0; i < spikes; i++) {
+      const ang = (i/spikes)*Math.PI*2;
+      const len = o.width*0.42;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(ang)*len, Math.sin(ang)*len);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#a9854a';
+    for (let i = 0; i < spikes; i++) {
+      const ang = (i/spikes)*Math.PI*2 + 0.3;
+      const len = o.width*0.3;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(ang)*len*0.4, Math.sin(ang)*len*0.4);
+      ctx.lineTo(Math.cos(ang+1)*len, Math.sin(ang+1)*len);
+      ctx.stroke();
+    }
+    ctx.restore();
   } else if (o.type === 'mummy') {
     const wrapGrad = ctx.createLinearGradient(0, -o.height, o.width, 0);
     wrapGrad.addColorStop(0, '#e8dfc4');
@@ -2449,6 +2675,7 @@ function draw() {
   } else {
     drawFarHills();
     drawPyramids();
+    drawUluru();
     drawHills();
     drawVillages();
     drawNorwayLandmarks();
