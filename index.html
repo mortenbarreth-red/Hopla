@@ -325,6 +325,7 @@
         <button class="trackBtn" data-track="africa">🦁<br>Afrika</button>
         <button class="trackBtn" data-track="norway">🇳🇴<br>Norge</button>
         <button class="trackBtn" data-track="australia">🦘<br>Australia</button>
+        <button class="trackBtn" data-track="vm">⚽<br>VM-banen</button>
       </div>
     </div>
 
@@ -582,6 +583,14 @@ const TRACKS = {
     showSun: true, showStars: false, showEarth: false, showClouds: true, showGrass: false,
     ground: ['#c76b3f', '#a34f2a'], groundContact: '#7a3a1e',
     hill: ['#c17a45', '#96562c'], farHill: ['#dba06a', '#c88854']
+  },
+  vm: {
+    label: 'VM-banen',
+    obstacleTypes: ['yellowPlayer'],
+    sky: ['#1a1d24', '#2b2f38', '#3a3f4a'],
+    showSun: false, showStars: false, showEarth: false, showClouds: false, showGrass: false,
+    ground: ['#3f9142', '#2f7534'], groundContact: '#1f4d22',
+    hill: ['#000000', '#000000'], farHill: ['#000000', '#000000'] // unused — replaced by drawStadium()
   }
 };
 const VOLCANO_HEIGHT = 210; // fixed geometry for the always-centered volcano
@@ -714,10 +723,14 @@ let villages = [];
 let norwayLandmarks = [];
 let uluruRocks = [];
 let groundOffset = 0;
+let stadiumBoardOffset = 0;
+let crowdOffset = 0;
 const PYRAMID_SPACING = 900;
 const VILLAGE_SPACING = 700;
 const NORWAY_LANDMARK_SPACING = 750;
 const ULURU_SPACING = 1000;
+const STADIUM_PANEL_W = 140;
+const STADIUM_SECTION_SPACING = 480; // repeat width of the yellow crowd sections
 
 function initClouds() {
   clouds = [];
@@ -798,6 +811,8 @@ function resetGame() {
   resetVolcanoSmoke();
   resetVolcanoRocks();
   volcanoRotation = 0;
+  stadiumBoardOffset = 0;
+  crowdOffset = 0;
 }
 
 function scheduleNextObstacle() {
@@ -830,6 +845,7 @@ function spawnObstacle() {
   else if (type === 'kangaroo') { w = 32; h = 38; }
   else if (type === 'emu') { w = 28; h = 55; }
   else if (type === 'tumbleweed') { w = 34; h = 34; }
+  else if (type === 'yellowPlayer') { w = 26; h = 44; }
   else { w = 50; h = 34; }                                                // camel
   const sizeMul = currentDifficulty().sizeMul;
   w *= sizeMul; h *= sizeMul;
@@ -1020,6 +1036,10 @@ function update(dt) {
   // background
   groundOffset -= speed * dt;
   if (groundOffset <= -40) groundOffset = 0;
+  stadiumBoardOffset -= speed * 0.9 * dt;
+  if (stadiumBoardOffset <= -STADIUM_PANEL_W) stadiumBoardOffset += STADIUM_PANEL_W;
+  crowdOffset -= speed * 0.35 * dt;
+  if (crowdOffset <= -STADIUM_SECTION_SPACING) crowdOffset += STADIUM_SECTION_SPACING;
   for (const c of clouds) {
     c.x -= c.speed * dt;
     if (c.x < -50) c.x = W + 50;
@@ -1460,6 +1480,106 @@ function drawUluru() {
     }
   });
 }
+
+function drawStadium() {
+  const boardH = 42;
+  const crowdBottom = GROUND_Y - boardH;
+  const roofH = 60;
+  const crowdTop = roofH * 0.62;
+
+  // stands fill almost the entire background — mostly red-clad fans
+  const crowdGrad = ctx.createLinearGradient(0, crowdTop, 0, crowdBottom);
+  crowdGrad.addColorStop(0, '#7a1418');
+  crowdGrad.addColorStop(1, '#9c1c22');
+  ctx.fillStyle = crowdGrad;
+  ctx.fillRect(0, crowdTop, W, crowdBottom - crowdTop);
+
+  // scattered yellow-clad sections among the red crowd, scrolling left with
+  // the rest of the stand (slower than the pitch-side boards, since the
+  // crowd sits farther back — correct parallax depth)
+  const sectionWidth = 90;
+  const wrappedOffset = ((crowdOffset % STADIUM_SECTION_SPACING) + STADIUM_SECTION_SPACING) % STADIUM_SECTION_SPACING;
+  ctx.fillStyle = '#d9b923';
+  for (let baseX = -STADIUM_SECTION_SPACING; baseX < W + STADIUM_SECTION_SPACING; baseX += STADIUM_SECTION_SPACING) {
+    ctx.fillRect(baseX + wrappedOffset, crowdTop, sectionWidth, crowdBottom - crowdTop);
+  }
+
+  // speckled texture suggesting individual fans/seats — deterministic
+  // (hash-based, not Math.random()) so it doesn't flicker between frames,
+  // and shifted by crowdOffset so the whole crowd visibly scrolls left
+  for (let y = crowdTop + 4; y < crowdBottom; y += 10) {
+    for (let x = -20; x < W + 20; x += 14) {
+      const worldX = x - crowdOffset;
+      const seed = Math.sin(worldX*12.9898 + y*78.233) * 43758.5453;
+      const frac = seed - Math.floor(seed);
+      ctx.fillStyle = frac < 0.5 ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.12)';
+      ctx.fillRect(x, y, 8, 6);
+    }
+  }
+
+  // thick roof canopy capping the top of the stand
+  const roofGrad = ctx.createLinearGradient(0, 0, 0, roofH);
+  roofGrad.addColorStop(0, '#2a2e35');
+  roofGrad.addColorStop(1, '#15171b');
+  ctx.fillStyle = roofGrad;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(W, 0);
+  ctx.lineTo(W, roofH*0.62);
+  ctx.quadraticCurveTo(W*0.5, roofH*1.05, 0, roofH*0.62);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, roofH*0.62);
+  ctx.quadraticCurveTo(W*0.5, roofH*1.05, W, roofH*0.62);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1.5;
+  for (let sx = 40; sx < W; sx += 90) {
+    ctx.beginPath();
+    ctx.moveTo(sx, roofH*0.2);
+    ctx.lineTo(sx, roofH*0.95);
+    ctx.stroke();
+  }
+
+  // scoreboard hanging from the roof
+  const sbW = 230, sbH = 34;
+  const sbX = W/2 - sbW/2, sbY = roofH*0.12;
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(sbX+8, 0); ctx.lineTo(sbX+8, sbY);
+  ctx.moveTo(sbX+sbW-8, 0); ctx.lineTo(sbX+sbW-8, sbY);
+  ctx.stroke();
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(sbX, sbY, sbW, sbH);
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(sbX, sbY, sbW, sbH);
+  ctx.font = 'bold 16px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffcc33';
+  ctx.fillText('BRASIL 1 - 2 NORGE', W/2, sbY + sbH/2 + 1);
+
+  // advertising hoarding band right at pitch-side, chanting the fans' cry —
+  // one solid red board with white text, scrolling smoothly. No alternating
+  // colors at all, so there is nothing left that could ever appear to flicker.
+  const boardTop = crowdBottom;
+  ctx.fillStyle = '#c8102e';
+  ctx.fillRect(0, boardTop, W, boardH);
+  ctx.font = 'bold ' + Math.floor(boardH*0.5) + 'px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  for (let x = stadiumBoardOffset - STADIUM_PANEL_W/2; x < W + STADIUM_PANEL_W; x += STADIUM_PANEL_W) {
+    ctx.fillText('RO! RO! RO!', x, boardTop + boardH/2 + 1);
+  }
+}
+
+
 function drawVillages() {
   if (selectedTrack !== 'africa') return;
   const baseY = GROUND_Y - 3;
@@ -2559,6 +2679,87 @@ function drawObstacle(o) {
       ctx.stroke();
     }
     ctx.restore();
+  } else if (o.type === 'yellowPlayer') {
+    // a running player in a yellow kit, caught mid-stride — outlined in dark
+    // strokes throughout so it reads clearly against red OR yellow crowd
+    // sections in the background
+    // legs (running stride) — dark underlay first, then skin tone on top
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.42, -o.height*0.32); ctx.lineTo(o.width*0.3, 0);
+    ctx.moveTo(o.width*0.58, -o.height*0.32); ctx.lineTo(o.width*0.7, -o.height*0.06);
+    ctx.stroke();
+    ctx.strokeStyle = '#e0b088';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.42, -o.height*0.32); ctx.lineTo(o.width*0.3, 0);
+    ctx.moveTo(o.width*0.58, -o.height*0.32); ctx.lineTo(o.width*0.7, -o.height*0.06);
+    ctx.stroke();
+    // boots
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.28, 0); ctx.lineTo(o.width*0.2, 0);
+    ctx.moveTo(o.width*0.7, -o.height*0.06); ctx.lineTo(o.width*0.8, -o.height*0.06);
+    ctx.stroke();
+    // shorts
+    ctx.fillStyle = '#1a3a8a';
+    ctx.fillRect(o.width*0.28, -o.height*0.46, o.width*0.44, o.height*0.18);
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(o.width*0.28, -o.height*0.46, o.width*0.44, o.height*0.18);
+    // jersey (yellow), with a bold dark outline so it pops against any
+    // background — including yellow-clad crowd sections behind it
+    const jerseyGrad = ctx.createLinearGradient(0, -o.height*0.75, 0, -o.height*0.42);
+    jerseyGrad.addColorStop(0, '#f7db3a');
+    jerseyGrad.addColorStop(1, '#e0bb1a');
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.5, -o.height*0.58, o.width*0.34, o.height*0.22, 0, 0, Math.PI*2);
+    ctx.fillStyle = jerseyGrad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+    // arms — dark underlay first for definition, then yellow on top
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.34, -o.height*0.58); ctx.lineTo(o.width*0.18, -o.height*0.42);
+    ctx.moveTo(o.width*0.64, -o.height*0.58); ctx.lineTo(o.width*0.76, -o.height*0.72);
+    ctx.stroke();
+    ctx.strokeStyle = '#f7db3a';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.34, -o.height*0.58); ctx.lineTo(o.width*0.18, -o.height*0.42);
+    ctx.moveTo(o.width*0.64, -o.height*0.58); ctx.lineTo(o.width*0.76, -o.height*0.72);
+    ctx.stroke();
+    // hands
+    ctx.fillStyle = '#e0b088';
+    ctx.beginPath();
+    ctx.arc(o.width*0.17, -o.height*0.41, 2.2, 0, Math.PI*2);
+    ctx.arc(o.width*0.77, -o.height*0.73, 2.2, 0, Math.PI*2);
+    ctx.fill();
+    // head, with a dark outline
+    ctx.beginPath();
+    ctx.arc(o.width*0.5, -o.height*0.82, o.width*0.16, 0, Math.PI*2);
+    ctx.fillStyle = '#e0b088';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // hair
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath();
+    ctx.arc(o.width*0.5, -o.height*0.88, o.width*0.16, Math.PI, 0);
+    ctx.fill();
+    // small shirt number on the back
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('9', o.width*0.5, -o.height*0.56);
   } else if (o.type === 'mummy') {
     const wrapGrad = ctx.createLinearGradient(0, -o.height, o.width, 0);
     wrapGrad.addColorStop(0, '#e8dfc4');
@@ -2672,6 +2873,8 @@ function draw() {
   if (selectedTrack === 'moon') ufos.forEach(drawUfo);
   if (selectedTrack === 'volcano') {
     drawVolcano();
+  } else if (selectedTrack === 'vm') {
+    drawStadium();
   } else {
     drawFarHills();
     drawPyramids();
