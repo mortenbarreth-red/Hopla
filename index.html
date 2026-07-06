@@ -688,18 +688,21 @@ function getHairFill(x0, y0, x1, y1) {
 // Renders "RO!" once to an offscreen canvas so the stadium crowd can sample
 // it as a letter mask — white-clad fans sitting in the shape of the letters,
 // like a real stadium card display, instead of text drawn over the crowd.
+// Sized generously: the crowd grid samples every 14x10px per "seat", so the
+// banner needs to span many seats in each direction to read as legible
+// letters rather than a formless white blob.
 let roBannerData = null;
-const RO_BANNER_W = 130, RO_BANNER_H = 44;
+const RO_BANNER_W = 260, RO_BANNER_H = 84;
 function getRoBannerData() {
   if (roBannerData) return roBannerData;
   const c = document.createElement('canvas');
   c.width = RO_BANNER_W; c.height = RO_BANNER_H;
   const cctx = c.getContext('2d');
-  cctx.font = 'bold 36px sans-serif';
+  cctx.font = 'bold 68px sans-serif';
   cctx.fillStyle = '#fff';
   cctx.textAlign = 'center';
   cctx.textBaseline = 'middle';
-  cctx.fillText('RO!', RO_BANNER_W/2, RO_BANNER_H/2 + 2);
+  cctx.fillText('RO!', RO_BANNER_W/2, RO_BANNER_H/2 + 4);
   roBannerData = cctx.getImageData(0, 0, RO_BANNER_W, RO_BANNER_H).data;
   return roBannerData;
 }
@@ -1124,7 +1127,6 @@ function update(dt) {
   stadiumBoardOffset -= speed * 0.9 * dt;
   if (stadiumBoardOffset <= -STADIUM_PANEL_W) stadiumBoardOffset += STADIUM_PANEL_W;
   crowdOffset -= speed * 0.35 * dt;
-  if (crowdOffset <= -STADIUM_SECTION_SPACING) crowdOffset += STADIUM_SECTION_SPACING;
   fanBannerOffset -= speed * 0.35 * dt;
   for (const c of clouds) {
     c.x -= c.speed * dt;
