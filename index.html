@@ -326,6 +326,7 @@
         <button class="trackBtn" data-track="norway">🇳🇴<br>Norge</button>
         <button class="trackBtn" data-track="australia">🦘<br>Australia</button>
         <button class="trackBtn" data-track="vm">⚽<br>VM-banen</button>
+        <button class="trackBtn" data-track="candy">🍭<br>Godteribanen</button>
       </div>
     </div>
 
@@ -591,6 +592,14 @@ const TRACKS = {
     showSun: false, showStars: false, showEarth: false, showClouds: false, showGrass: false,
     ground: ['#3f9142', '#2f7534'], groundContact: '#1f4d22',
     hill: ['#000000', '#000000'], farHill: ['#000000', '#000000'] // unused — replaced by drawStadium()
+  },
+  candy: {
+    label: 'Godteribanen',
+    obstacleTypes: ['marshmallow', 'lollipop', 'candyCane'],
+    sky: ['#b98ee0', '#d3a6ec', '#f4dcf7'],
+    showSun: true, showStars: false, showEarth: false, showClouds: true, showGrass: false,
+    ground: ['#6b4226', '#4a2c17'], groundContact: '#2e1a0d',
+    hill: ['#ffd6ec', '#ffb8dc'], farHill: ['#ffe8f5', '#ffd3ea']
   }
 };
 const VOLCANO_HEIGHT = 210; // fixed geometry for the always-centered volcano
@@ -891,6 +900,9 @@ function spawnObstacle() {
   else if (type === 'emu') { w = 28; h = 55; }
   else if (type === 'tumbleweed') { w = 34; h = 34; }
   else if (type === 'yellowPlayer') { w = 26; h = 44; }
+  else if (type === 'marshmallow') { w = 34; h = 28; }
+  else if (type === 'lollipop') { w = 24; h = 62; }
+  else if (type === 'candyCane') { w = 28; h = 64; }
   else { w = 50; h = 34; }                                                // camel
   const sizeMul = currentDifficulty().sizeMul;
   w *= sizeMul; h *= sizeMul;
@@ -1273,15 +1285,54 @@ function drawSky() {
     // sun with soft glow for a bit of atmosphere/light direction
     const sunX = W*0.8, sunY = selectedTrack === 'desert' ? 110 : 70;
     const glow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 90);
-    glow.addColorStop(0, 'rgba(255,250,210,0.9)');
-    glow.addColorStop(0.4, 'rgba(255,250,210,0.35)');
-    glow.addColorStop(1, 'rgba(255,250,210,0)');
+    const glowColor = selectedTrack === 'candy' ? '255,245,120' : '255,250,210';
+    glow.addColorStop(0, `rgba(${glowColor},0.9)`);
+    glow.addColorStop(0.4, `rgba(${glowColor},0.35)`);
+    glow.addColorStop(1, `rgba(${glowColor},0)`);
     ctx.fillStyle = glow;
     ctx.fillRect(sunX-90, sunY-90, 180, 180);
-    ctx.fillStyle = '#fff6d6';
-    ctx.beginPath();
-    ctx.arc(sunX, sunY, 26, 0, Math.PI*2);
-    ctx.fill();
+
+    if (selectedTrack === 'candy') {
+      // a lemon-drop sun, shaped like an actual lemon with pointed ends
+      ctx.save();
+      ctx.translate(sunX, sunY);
+      const lemonGrad = ctx.createRadialGradient(-8, -8, 4, 0, 0, 30);
+      lemonGrad.addColorStop(0, '#fff9c4');
+      lemonGrad.addColorStop(1, '#f4d90a');
+      ctx.fillStyle = lemonGrad;
+      ctx.beginPath();
+      ctx.moveTo(-28, 0);
+      ctx.quadraticCurveTo(-20, -22, 0, -24);
+      ctx.quadraticCurveTo(20, -22, 28, 0);
+      ctx.quadraticCurveTo(20, 22, 0, 24);
+      ctx.quadraticCurveTo(-20, 22, -28, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(180,150,0,0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // little nub tips, like a real lemon
+      ctx.fillStyle = '#c9a800';
+      ctx.beginPath();
+      ctx.ellipse(-27, 0, 3, 2, 0, 0, Math.PI*2);
+      ctx.ellipse(27, 0, 3, 2, 0, 0, Math.PI*2);
+      ctx.fill();
+      // subtle citrus texture lines
+      ctx.strokeStyle = 'rgba(230,200,20,0.5)';
+      ctx.lineWidth = 1;
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-24, i*8);
+        ctx.quadraticCurveTo(0, i*10, 24, i*8);
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#fff6d6';
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, 26, 0, Math.PI*2);
+      ctx.fill();
+    }
   }
 }
 
@@ -1877,6 +1928,25 @@ function drawHills() {
       ctx.quadraticCurveTo(h.x + h.w*0.5, GROUND_Y - h.h, h.x + h.w*0.72, GROUND_Y - h.h*0.8);
       ctx.stroke();
     }
+    if (selectedTrack === 'candy') {
+      // fluffy cotton-candy tufts along the silhouette, so the hill reads
+      // clearly as spun sugar rather than a plain smooth mountain
+      const puffs = 7;
+      for (let i = 0; i <= puffs; i++) {
+        const t = i / puffs;
+        const px = h.x + h.w*t;
+        const py = GROUND_Y - h.h*Math.sin(t*Math.PI)*0.95;
+        const pr = 10 + Math.sin(t*Math.PI)*6;
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.beginPath();
+        ctx.arc(px, py, pr, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath();
+        ctx.arc(px - pr*0.3, py - pr*0.3, pr*0.55, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
   }
 }
 
@@ -2009,6 +2079,25 @@ function drawGround() {
       ctx.moveTo(x, GROUND_Y+35);
       ctx.quadraticCurveTo(x+11, GROUND_Y+30, x+22, GROUND_Y+35);
       ctx.stroke();
+    }
+  } else if (selectedTrack === 'candy') {
+    // embossed square grid, like a real chocolate bar
+    const cell = 32;
+    const offX = ((groundOffset % cell) + cell) % cell;
+    for (let x = offX - cell; x < W; x += cell) {
+      for (let y = GROUND_Y + 6; y < H - 4; y += cell) {
+        // beveled highlight (top-left) and shadow (bottom-right) give each
+        // square a raised, embossed chocolate-bar look
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        ctx.fillRect(x + 2, y + 2, cell - 4, 2);
+        ctx.fillRect(x + 2, y + 2, 2, cell - 4);
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.fillRect(x + 2, y + cell - 4, cell - 4, 2);
+        ctx.fillRect(x + cell - 4, y + 2, 2, cell - 4);
+        ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 2, y + 2, cell - 4, cell - 4);
+      }
     }
   }
 }
@@ -2919,6 +3008,141 @@ function drawObstacle(o) {
     ctx.font = 'bold 8px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('9', o.width*0.5, -o.height*0.56);
+  } else if (o.type === 'marshmallow') {
+    // a soft, puffy marshmallow with a lightly toasted top
+    const grad = ctx.createLinearGradient(0, -o.height, 0, 0);
+    grad.addColorStop(0, '#fffaf3');
+    grad.addColorStop(1, '#fbe9d9');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.08, 0);
+    ctx.quadraticCurveTo(0, -o.height*0.5, o.width*0.1, -o.height*0.85);
+    ctx.quadraticCurveTo(o.width*0.3, -o.height, o.width*0.5, -o.height*0.95);
+    ctx.quadraticCurveTo(o.width*0.7, -o.height, o.width*0.9, -o.height*0.85);
+    ctx.quadraticCurveTo(o.width, -o.height*0.5, o.width*0.92, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(200,150,100,0.35)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    // toasted speckles on top
+    ctx.fillStyle = 'rgba(200,140,80,0.5)';
+    ctx.beginPath();
+    ctx.arc(o.width*0.35, -o.height*0.88, 2, 0, Math.PI*2);
+    ctx.arc(o.width*0.6, -o.height*0.92, 1.6, 0, Math.PI*2);
+    ctx.arc(o.width*0.48, -o.height*0.78, 1.8, 0, Math.PI*2);
+    ctx.fill();
+    // soft highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.3, -o.height*0.55, o.width*0.12, o.height*0.2, -0.2, 0, Math.PI*2);
+    ctx.fill();
+  } else if (o.type === 'lollipop') {
+    // a classic round lollipop with a rainbow spiral swirl, on a stick
+    const stickH = o.height*0.4;
+    ctx.strokeStyle = '#e8d9b0';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(o.width*0.5, 0);
+    ctx.lineTo(o.width*0.5, -stickH);
+    ctx.stroke();
+
+    const headCY = -o.height*0.74;
+    const headR = o.width*0.6; // bigger round head than before
+
+    // soft drop shadow behind the candy disc for a bit of depth
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.beginPath();
+    ctx.arc(o.width*0.5 + 2, headCY + 2, headR, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(o.width*0.5, headCY);
+    ctx.beginPath();
+    ctx.arc(0, 0, headR, 0, Math.PI*2);
+    ctx.clip();
+
+    // rainbow spiral swirl, drawn as a thick multi-color spiral stroke
+    const rainbow = ['#ff3b3b', '#ff9a2e', '#ffe14d', '#4ade6b', '#3fa9f5', '#8a5cf6'];
+    const turns = 2.6;
+    const steps = 90;
+    ctx.lineWidth = headR / 3.6;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < steps; i++) {
+      const t0 = i / steps, t1 = (i + 1.2) / steps;
+      const ang0 = t0 * turns * Math.PI * 2, ang1 = t1 * turns * Math.PI * 2;
+      const r0 = headR * (1 - t0), r1 = headR * (1 - t1);
+      ctx.strokeStyle = rainbow[i % rainbow.length];
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(ang0)*r0, Math.sin(ang0)*r0);
+      ctx.lineTo(Math.cos(ang1)*r1, Math.sin(ang1)*r1);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // outline + glossy highlight
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(o.width*0.5, headCY, headR, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(o.width*0.5 - headR*0.35, headCY - headR*0.35, headR*0.25, headR*0.15, -0.6, 0, Math.PI*2);
+    ctx.fill();
+  } else if (o.type === 'candyCane') {
+    // classic candy cane — straight shaft curving into a hook at the top,
+    // with red/white candy stripes, based on Oscar's drawing
+    const shaftX = o.width*0.58;
+    const shaftTopY = -o.height*0.52;
+    const hookR = o.width*0.34;
+    const hookCX = shaftX - hookR;
+    const lw = o.width*0.34;
+
+    const canePathFn = () => {
+      ctx.moveTo(shaftX, 0);
+      ctx.lineTo(shaftX, shaftTopY);
+      ctx.arc(hookCX, shaftTopY, hookR, 0, Math.PI, true);
+    };
+
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // soft outline pass for definition against any background
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = lw + 3;
+    ctx.beginPath();
+    canePathFn();
+    ctx.stroke();
+
+    // white candy base
+    ctx.strokeStyle = '#fffaf3';
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    canePathFn();
+    ctx.stroke();
+
+    // red diagonal-reading stripes (dashed along the cane's own path) —
+    // butt caps here (not round) so each stripe stays a clean, separate
+    // segment instead of its rounded ends bleeding into the white gaps
+    ctx.strokeStyle = '#e0182a';
+    ctx.lineWidth = lw * 0.92;
+    ctx.lineCap = 'butt';
+    ctx.setLineDash([lw*0.85, lw*0.85]);
+    ctx.beginPath();
+    canePathFn();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineCap = 'round';
+
+    // glossy highlight along the shaft
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = lw*0.25;
+    ctx.beginPath();
+    ctx.moveTo(shaftX - lw*0.25, -2);
+    ctx.lineTo(shaftX - lw*0.25, shaftTopY + 2);
+    ctx.stroke();
   } else if (o.type === 'mummy') {
     const wrapGrad = ctx.createLinearGradient(0, -o.height, o.width, 0);
     wrapGrad.addColorStop(0, '#e8dfc4');
